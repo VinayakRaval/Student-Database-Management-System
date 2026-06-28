@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Faculty Account Approval</title>
+<style>
+    body {font-family: Arial, sans-serif; background: #f5f7fa; margin: 0; padding: 0;}
+    .container {background: #fff; width: 600px; margin: 30px auto; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
+    .header {background: #003e7f; color: #fff; padding: 18px; font-size: 20px; text-align: center; font-weight: bold;}
+    .content {padding: 25px; line-height: 1.6; font-size: 15px; color: #333;}
+    .badge {background: #e6f3ff; border-left: 4px solid #007bff; padding: 12px; margin: 18px 0;}
+    .btn {display: inline-block; background: #007bff; color: #fff !important; padding: 12px 18px; margin-top: 14px; border-radius: 5px; text-decoration: none; font-weight: bold;}
+    .footer {text-align: center; background: #f1f1f1; padding: 12px; font-size: 13px; color: #666;}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">Faculty Account Approval Notice</div>
+
+    <div class="content">
+        <p>Dear <strong>{{ faculty_name }}</strong> (ID: <strong>{{ faculty_id }}</strong>),</p>
+
+        <p>We are pleased to inform you that your faculty registration has been
+        <strong>approved & activated</strong> in the College Management System.</p>
+
+        <div class="badge">
+            <strong>Login Email:</strong> {{ email }} <br>
+            <strong>Temporary Password:</strong> {{ temp_password }} <br>
+            <strong>Role:</strong> {{ role }}
+        </div>
+
+        <p>Please click below to login and <strong>reset your password immediately</strong> for security reasons.</p>
+
+        <a href="{{ login_url }}" class="btn">Access Faculty Portal</a>
+
+        <p>If you have questions or need assistance, contact the system administrator.</p>
+
+        <p>Regards,<br>
+        <strong>Administration Department</strong><br>
+        Government Engineering College, Chamarajanagar</p>
+    </div>
+
+    <div class="footer">© {{ year }} Government Engineering College, Chamarajanagar</div>
+</div>
+
+</body>
+</html>

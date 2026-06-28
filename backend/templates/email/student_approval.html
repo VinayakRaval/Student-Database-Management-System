@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Student Admission Approved</title>
+<style>
+    body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #f4f7fa;
+        margin: 0;
+        padding: 0;
+    }
+    .container {
+        max-width: 650px;
+        background: #ffffff;
+        margin: 40px auto;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+    .header {
+        background: #0056b3;
+        color: white;
+        text-align: center;
+        padding: 20px 25px;
+        font-size: 22px;
+        font-weight: 600;
+    }
+    .content {
+        padding: 25px 30px;
+        color: #333;
+        line-height: 1.7;
+        font-size: 15px;
+    }
+    .content p {
+        margin: 10px 0;
+    }
+    .highlight-box {
+        background: #e9f4ff;
+        border-left: 4px solid #007bff;
+        padding: 12px 15px;
+        margin: 15px 0;
+    }
+    .login-btn {
+        display: inline-block;
+        background: #007bff;
+        color: white !important;
+        padding: 12px 20px;
+        text-align: center;
+        margin-top: 16px;
+        border-radius: 5px;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    .footer {
+        background: #fafafa;
+        border-top: 1px solid #e6e6e6;
+        text-align: center;
+        padding: 15px;
+        font-size: 13px;
+        color: #666;
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="header">
+        Student Admission Approved
+    </div>
+
+    <div class="content">
+        <p>Dear <strong>{{ student_name }}</strong>and Your Admission id is <strong>{{student_admission_id}}</strong>,your temprovery password is <strong>{{password}}</strong></p>
+
+        <p>We are pleased to inform you that your registration has been 
+           <strong>successfully approved</strong> by the Principal.</p>
+
+        <div class="highlight-box">
+            <strong>Current Status:</strong> Approved & Active <br>
+            <strong>Next Step:</strong> Login & proceed with academic formalities.
+        </div>
+
+        <p>
+            You may now access your student portal, complete remaining profile details,
+            and follow your academic schedule.
+        </p>
+
+        <a href="{{ login_url }}" class="login-btn">Login to Student Portal</a>
+
+        <p>If you face any issues, please reach out to the administration office.</p>
+
+        <p>
+            Regards,<br>
+            <strong>College Administrative Department</strong><br>
+            {{ college_name }}
+        </p>
+    </div>
+
+    <div class="footer">
+        <p>© {{ year }} {{ college_name }} — This is an automated email. Please do not reply.</p>
+    </div>
+
+</div>
+
+</body>
+</html>

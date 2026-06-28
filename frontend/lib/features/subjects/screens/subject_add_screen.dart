@@ -1,0 +1,310 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../models/subject_model.dart';
+import '../providers/subject_provider.dart';
+
+class SubjectAddScreen extends ConsumerStatefulWidget {
+  const SubjectAddScreen({super.key});
+
+  @override
+  ConsumerState<SubjectAddScreen> createState() => _SubjectAddScreenState();
+}
+
+class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
+  final _formKey = GlobalKey<FormState>();
+  
+  final _nameController = TextEditingController();
+  final _codeController = TextEditingController();
+
+  int? _selectedDepartment;
+  int? _selectedSemester;
+  int? _selectedSchema;
+
+  void _submit() {
+    if (_formKey.currentState!.validate()) {
+      if (_selectedDepartment == null || _selectedSemester == null || _selectedSchema == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select all dropdown fields')),
+        );
+        return;
+      }
+
+      final subjectData = SubjectAddModel(
+        subjectName: _nameController.text,
+        subjectCode: _codeController.text,
+        departmentId: _selectedDepartment!,
+        semesterId: _selectedSemester!,
+        schemaId: _selectedSchema!,
+      );
+
+      ref.read(subjectProvider.notifier).addSubject(subjectData);
+    }
+  }
+
+  // --- NEW: Add Schema Dialog ---
+  void _showAddSchemaDialog() {
+    if (_selectedDepartment == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a Department first.')),
+      );
+      return;
+    }
+
+    final schemaNameCtrl = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Add New Schema"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Enter the name for the new syllabus pattern (e.g. '2025 Scheme')."),
+            const SizedBox(height: 16),
+            TextField(
+              controller: schemaNameCtrl,
+              decoration: const InputDecoration(
+                labelText: "Schema Name",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF13246E)),
+            onPressed: () async {
+              if (schemaNameCtrl.text.isEmpty) return;
+              Navigator.pop(ctx);
+              
+              final success = await ref.read(subjectProvider.notifier)
+                  .addSchema(schemaNameCtrl.text, _selectedDepartment!);
+              
+              if (success && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Schema Added Successfully!"), backgroundColor: Colors.green),
+                );
+              }
+            },
+            child: const Text("Add", style: TextStyle(color: Colors.white)),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(subjectProvider);
+
+    ref.listen(subjectProvider, (previous, next) {
+      if (next.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.red),
+        );
+      }
+      if (next.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subject Added Successfully!'), backgroundColor: Colors.green),
+        );
+        context.pop();
+      }
+    });
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text("Add New Subject", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Form(
+              key: _formKey,
+              child: Container(
+                padding: const EdgeInsets.all(30),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0E0E0), 
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Subject Details",
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 30),
+
+                    _buildDropdown(
+                      label: "Department",
+                      value: _selectedDepartment,
+                      items: state.departments,
+                      onChanged: (val) => setState(() => _selectedDepartment = val),
+                      isLoading: state.isLoading,
+                    ),
+
+                    _buildDropdown(
+                      label: "Semester",
+                      value: _selectedSemester,
+                      items: state.semesters,
+                      onChanged: (val) => setState(() => _selectedSemester = val),
+                      isLoading: state.isLoading,
+                    ),
+
+                    // Modified Schema Dropdown with Add Button
+                    _buildSchemaDropdownWithAdd(state),
+
+                    _buildField(label: "Subject Name", controller: _nameController, hint: "e.g. Data Structures"),
+                    _buildField(label: "Subject Code", controller: _codeController, hint: "e.g. CS101"),
+
+                    const SizedBox(height: 30),
+
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: SizedBox(
+                        width: 150,
+                        height: 45,
+                        child: ElevatedButton(
+                          onPressed: state.isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF13246E),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          child: state.isLoading
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Text("Add Subject", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGETS ---
+
+  Widget _buildField({required String label, required TextEditingController controller, String? hint}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: TextFormField(
+              controller: controller,
+              validator: (val) => val == null || val.isEmpty ? "Required" : null,
+              decoration: InputDecoration(
+                hintText: hint,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdown({
+    required String label,
+    required int? value,
+    required List<SubjectOption> items,
+    required Function(int?) onChanged,
+    required bool isLoading,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButtonFormField<int>(
+                value: value,
+                isExpanded: true,
+                hint: Text(isLoading ? "Loading..." : "Select"),
+                items: items.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
+                onChanged: onChanged,
+                decoration: const InputDecoration(border: InputBorder.none),
+                validator: (val) => val == null ? "Required" : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Special Widget for Schema to include the Add Button
+  Widget _buildSchemaDropdownWithAdd(SubjectState state) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Schema", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButtonFormField<int>(
+                      value: _selectedSchema,
+                      isExpanded: true,
+                      hint: Text(state.isLoading ? "Loading..." : "Select"),
+                      items: state.schemas.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
+                      onChanged: (val) => setState(() => _selectedSchema = val),
+                      decoration: const InputDecoration(border: InputBorder.none),
+                      validator: (val) => val == null ? "Required" : null,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Add Button
+              InkWell(
+                onTap: _showAddSchemaDialog,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 48,
+                  width: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF13246E),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.add, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

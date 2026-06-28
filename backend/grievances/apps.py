@@ -1,0 +1,9 @@
+from django.apps import AppConfig
+
+class FeesConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "grievances"
+
+    def ready(self):
+        # import signals if you later move verify logic to signals
+        pass
