@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart' as p;
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/core/constants/api_constants.dart';
 import '../providers/timetable_provider.dart';
 import '../models/timetable_model.dart';
+import '../../subjects/models/assign_subject_model.dart';
 import '../../subjects/providers/assign_subject_provider.dart'; 
 
 class TimetableCreateScreen extends ConsumerStatefulWidget {
@@ -22,12 +26,40 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
   final List<Map<String, dynamic>> _slots = [];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(assignSubjectProvider.notifier).loadInitialData();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final configState = ref.watch(assignSubjectProvider);
     final timetableState = ref.watch(timetableProvider);
 
+    final auth = p.Provider.of<AuthProvider>(context);
+    final role = (auth.role ?? '').toUpperCase();
+    final isHod = role == AppRoles.hod;
+    final int? userDeptId = auth.userData?['department'] is int
+        ? auth.userData!['department'] as int
+        : int.tryParse(auth.userData?['department']?.toString() ?? '');
+    final String? userDeptName = auth.userData?['department_name']?.toString();
+
+    // For HOD: Filter departments to ONLY show their assigned department!
+    List<AssignOption> availableDepts = configState.departments;
+    if (isHod && userDeptId != null) {
+      final filtered = configState.departments.where((d) => d.id == userDeptId).toList();
+      if (filtered.isNotEmpty) {
+        availableDepts = filtered;
+      } else {
+        availableDepts = [AssignOption(id: userDeptId, name: userDeptName ?? "My Department")];
+      }
+    }
+
     ref.listen(timetableProvider, (prev, next) {
       if (next.isSuccess) {
+        ref.invalidate(timetableListProvider);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Timetable Created Successfully!"), backgroundColor: Colors.green));
         context.pop();
       }
@@ -35,6 +67,54 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.red));
       }
     });
+
+    // Auto-select department: For HOD, force userDeptId
+    if (isHod && userDeptId != null) {
+      if (_selectedDept != userDeptId) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _selectedDept != userDeptId) {
+            setState(() {
+              _selectedDept = userDeptId;
+            });
+            _fetchAssignments();
+          }
+        });
+      }
+    } else if (_selectedDept == null && availableDepts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedDept == null) {
+          setState(() {
+            _selectedDept = availableDepts.first.id;
+          });
+          _fetchAssignments();
+        }
+      });
+    }
+
+    // Auto-select semester if available and not selected
+    if (_selectedSem == null && configState.semesters.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedSem == null) {
+          final sem3 = configState.semesters.firstWhere((s) => s.id == 3, orElse: () => configState.semesters.first);
+          setState(() {
+            _selectedSem = sem3.id;
+          });
+          _fetchAssignments();
+        }
+      });
+    }
+
+    // Auto-select academic year if available and not selected
+    if (_selectedAy == null && configState.academicYears.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedAy == null) {
+          setState(() {
+            _selectedAy = configState.academicYears.first.id;
+          });
+          _fetchAssignments();
+        }
+      });
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -55,6 +135,12 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (configState.isLoading)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12.0),
+                child: LinearProgressIndicator(),
+              ),
+
             // --- CONFIGURATION ---
             Container(
               padding: const EdgeInsets.all(16),
@@ -62,10 +148,22 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
               child: Column(
                 children: [
                   DropdownButtonFormField<int>(
-                    decoration: const InputDecoration(labelText: "Department", border: OutlineInputBorder()),
-                    value: _selectedDept,
-                    items: configState.departments.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
-                    onChanged: (val) { setState(() => _selectedDept = val); _fetchAssignments(); },
+                    decoration: InputDecoration(
+                      labelText: isHod ? "Department (Your Assigned Department)" : "Department",
+                      border: const OutlineInputBorder(),
+                      prefixIcon: isHod ? const Icon(Icons.lock_outline, size: 20) : null,
+                    ),
+                    value: (availableDepts.any((e) => e.id == _selectedDept))
+                        ? _selectedDept
+                        : (availableDepts.isNotEmpty ? availableDepts.first.id : null),
+                    hint: const Text("Select Department"),
+                    items: availableDepts.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
+                    onChanged: isHod
+                        ? null
+                        : (val) {
+                            setState(() => _selectedDept = val);
+                            _fetchAssignments();
+                          },
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -73,7 +171,8 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
                       Expanded(
                         child: DropdownButtonFormField<int>(
                           decoration: const InputDecoration(labelText: "Semester", border: OutlineInputBorder()),
-                          value: _selectedSem,
+                          value: (configState.semesters.any((e) => e.id == _selectedSem)) ? _selectedSem : null,
+                          hint: const Text("Select Semester"),
                           items: configState.semesters.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
                           onChanged: (val) { setState(() => _selectedSem = val); _fetchAssignments(); },
                         ),
@@ -82,7 +181,8 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
                       Expanded(
                         child: DropdownButtonFormField<int>(
                           decoration: const InputDecoration(labelText: "Academic Year", border: OutlineInputBorder()),
-                          value: _selectedAy,
+                          value: (configState.academicYears.any((e) => e.id == _selectedAy)) ? _selectedAy : null,
+                          hint: const Text("Select Academic Year"),
                           items: configState.academicYears.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
                           onChanged: (val) { setState(() => _selectedAy = val); _fetchAssignments(); },
                         ),
@@ -210,7 +310,7 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
     }
 
     String selectedDay = "MON";
-    int? selectedAssignment;
+    int? selectedAssignment = assignments.isNotEmpty ? assignments.first.id : null;
     // Default to first slot
     TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 30);
     TimeOfDay endTime = const TimeOfDay(hour: 10, minute: 25);
@@ -236,7 +336,7 @@ class _TimetableCreateScreenState extends ConsumerState<TimetableCreateScreen> {
                   DropdownButtonFormField<int>(
                     decoration: const InputDecoration(labelText: "Subject & Faculty"),
                     isExpanded: true,
-                    value: selectedAssignment,
+                    value: (assignments.any((a) => a.id == selectedAssignment)) ? selectedAssignment : null,
                     items: assignments.map((a) => DropdownMenuItem(
                       value: a.id, 
                       child: Text("${a.subjectName} \n(${a.facultyName})", style: const TextStyle(fontSize: 13))

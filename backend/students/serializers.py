@@ -13,6 +13,9 @@ class StudentSerializer(serializers.ModelSerializer):
     department_id = serializers.IntegerField(write_only=True, required=False)
     semester_id = serializers.IntegerField(write_only=True, required=False)
     academic_year_id = serializers.IntegerField(write_only=True, required=False)
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    semester_name = serializers.CharField(source='semester.sem_number', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.year_name', read_only=True)
 
     documents = serializers.SerializerMethodField(read_only=True)
 
@@ -55,9 +58,9 @@ class StudentSerializer(serializers.ModelSerializer):
         sem_id = validated_data.pop('semester_id', None)
         year_id = validated_data.pop('academic_year_id', None)
 
-        department = Department.objects.get(id=dept_id) if dept_id else None
-        semester = Semester.objects.get(id=sem_id) if sem_id else None
-        academic_year = AcademicYear.objects.get(id=year_id) if year_id else None
+        department = Department.objects.filter(id=dept_id).first() if dept_id else None
+        semester = Semester.objects.filter(id=sem_id).first() if sem_id else None
+        academic_year = AcademicYear.objects.filter(id=year_id).first() if year_id else None
 
         email = validated_data.get('email')
         phone = validated_data.get('mobile_no')
@@ -72,7 +75,7 @@ class StudentSerializer(serializers.ModelSerializer):
         user = CustomUser.objects.create_user(
             email=email,
             phone=phone,
-            password=make_password(default_password),
+            password=default_password,
             role='STUDENT',
             department=department,
             force_password_change=True,
@@ -87,6 +90,11 @@ class StudentSerializer(serializers.ModelSerializer):
         student = Student.objects.create(**validated_data)
         student.temporary_password = default_password
         student.save(update_fields=["temporary_password"])
+
+        if student.admission_id:
+            user.user_id = student.admission_id
+            user.save(update_fields=['user_id'])
+
         return student
 
     def update(self, instance, validated_data):

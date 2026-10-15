@@ -21,7 +21,6 @@ class GrievanceViewSet(viewsets.ModelViewSet):
     """
     serializer_class = GrievanceSerializer
     permission_classes = [permissions.IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
 
     def get_object(self):
       """
@@ -83,10 +82,11 @@ class GrievanceViewSet(viewsets.ModelViewSet):
             is_active=True,
         )
 
-        # Extra logic for HOD/Principal/Accounts: match department
-        if target_role in ["HOD", "PRINCIPAL", "ACCOUNTS"]:
-            if student.department:
-                targets = targets.filter(department=student.department)
+        # Department matching applies specifically to HOD
+        if target_role == "HOD" and student.department:
+            dept_targets = targets.filter(department=student.department)
+            if dept_targets.exists():
+                targets = dept_targets
 
         if not targets.exists():
             raise serializers.ValidationError({"detail": f"No active users found for role {target_role}."})

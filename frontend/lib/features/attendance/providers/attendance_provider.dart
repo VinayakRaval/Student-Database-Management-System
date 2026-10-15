@@ -1,5 +1,6 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:dio/dio.dart';
+import 'package:frontend/core/network/api_client.dart';
 import '../models/attendance_model.dart';
 import 'attendance_state.dart';
 
@@ -11,7 +12,7 @@ final attendanceProvider = StateNotifierProvider.family.autoDispose<AttendanceNo
 // 2. The Notifier Logic
 class AttendanceNotifier extends StateNotifier<AttendanceState> {
   final int slotId;
-  final Dio _dio = Dio(); // Replace with ref.read(apiClientProvider) if you have one
+  final Dio _dio = ApiClient().dio;
 
   AttendanceNotifier(this.slotId) : super(AttendanceState()) {
     fetchStudents();
@@ -21,15 +22,18 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
   Future<void> fetchStudents() async {
     state = state.copyWith(status: AttendanceStatus.loading);
     try {
-      // Replace with your actual Backend URL
       final response = await _dio.get(
-        'http://your-api-url/api/attendance/fetch_students_for_slot/',
+        '/attendance/fetch_students_for_slot/',
         queryParameters: {'slot_id': slotId},
-        // options: Options(headers: {'Authorization': 'Bearer $token'}), // Add Token logic here
       );
 
-      final List data = response.data;
-      final students = data.map((e) => StudentAttendanceModel.fromJson(e)).toList();
+      List rawList = [];
+      if (response.data is List) {
+        rawList = response.data;
+      } else if (response.data is Map && response.data['results'] is List) {
+        rawList = response.data['results'];
+      }
+      final students = rawList.map((e) => StudentAttendanceModel.fromJson(Map<String, dynamic>.from(e as Map))).toList();
 
       state = state.copyWith(status: AttendanceStatus.loaded, students: students);
     } catch (e) {
@@ -67,13 +71,12 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
       final date = DateTime.now().toIso8601String().split('T')[0]; // YYYY-MM-DD
 
       await _dio.post(
-        'http://your-api-url/api/attendance/',
+        '/attendance/',
         data: {
           "timetable_slot": slotId,
           "date": date,
           "records": records,
         },
-        // options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
 
       state = state.copyWith(status: AttendanceStatus.success);

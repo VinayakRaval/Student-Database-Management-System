@@ -82,15 +82,22 @@ class Student(models.Model):
     photo = models.ImageField(upload_to='photos/', null=True, blank=True)
     signature = models.ImageField(upload_to='signatures/', null=True, blank=True)
     temporary_password = models.CharField(max_length=50, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.admission_id:
             last_student = Student.objects.order_by('id').last()
+            next_num = 1
             if last_student and last_student.admission_id:
-                last_id = int(last_student.admission_id.replace('GECC', ''))
-                self.admission_id = f"GECC{last_id + 1:06d}"
-            else:
-                self.admission_id = "GECC000001"
+                import re
+                nums = re.findall(r'\d+', last_student.admission_id)
+                if nums:
+                    try:
+                        next_num = int(nums[-1]) + 1
+                    except ValueError:
+                        next_num = (last_student.id or 0) + 1
+            self.admission_id = f"GECC{next_num:06d}"
         super().save(*args, **kwargs)
 
 

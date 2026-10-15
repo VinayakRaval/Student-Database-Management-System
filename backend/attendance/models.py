@@ -10,6 +10,7 @@ class AttendanceSession(models.Model):
     faculty = models.ForeignKey(Faculty, on_delete=models.CASCADE)
     date = models.DateField()
     session_count = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         # Use the correct field name from your Subject model
@@ -18,6 +19,9 @@ class AttendanceSession(models.Model):
 
 
 # Attendance Records
+
+    class Meta:
+        db_table = 'attendance_session'
 class AttendanceRecord(models.Model):
     session = models.ForeignKey(AttendanceSession, on_delete=models.CASCADE, related_name="records")
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
@@ -26,3 +30,6 @@ class AttendanceRecord(models.Model):
     def __str__(self):
         # Use the correct field name in Subject and Student
         return f"{self.student.usn} - {self.session.subject.subject_code} ({self.status})"
+
+    class Meta:
+        db_table = 'attendance_record'

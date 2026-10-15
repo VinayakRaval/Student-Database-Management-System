@@ -136,7 +136,12 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                   PopupMenuItem(
-                    onTap: () => auth.logout(),
+                    onTap: () async {
+                      await auth.logout();
+                      if (ctx.mounted) {
+                        ctx.go('/login');
+                      }
+                    },
                     child: const ListTile(
                       leading: Icon(Icons.logout, color: Colors.red),
                       title: Text(

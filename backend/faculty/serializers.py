@@ -1,14 +1,24 @@
+
 from rest_framework import serializers
 from .models import Faculty
 import re
 
 PHONE_REGEX = re.compile(r"^\+?\d{7,15}$")
 
+
 class FacultySerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source="department.name", read_only=True)
+
     class Meta:
         model = Faculty
         fields = "__all__"
-        read_only_fields = ("registration_date", "approved_date", "user")
+        read_only_fields = (
+            "registration_date",
+            "approved_date",
+            "user",
+            "created_at",
+            "updated_at",
+        )
 
     def validate_phone(self, value):
         if not PHONE_REGEX.match(value):

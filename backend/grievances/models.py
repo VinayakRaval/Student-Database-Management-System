@@ -36,6 +36,7 @@ class Grievance(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'grievance'
         ordering = ["-created_at"]
 
     def __str__(self):

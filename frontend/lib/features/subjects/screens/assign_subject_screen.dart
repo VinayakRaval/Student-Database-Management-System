@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart' as p;
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/core/constants/api_constants.dart';
 import '../models/assign_subject_model.dart';
 import '../providers/assign_subject_provider.dart';
 
@@ -22,6 +25,14 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
   // List of Rows (Subject Code, Faculty ID)
   // Each item is a map: {'subject': 'CS101', 'faculty': 5}
   List<Map<String, dynamic>> _rows = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(assignSubjectProvider.notifier).loadInitialData();
+    });
+  }
 
   // Helper to fetch subjects when Dept/Sem changes
   void _checkAndFetchSubjects() {
@@ -76,16 +87,107 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(assignSubjectProvider);
 
-    // Listen for success
+    final auth = p.Provider.of<AuthProvider>(context);
+    final role = (auth.role ?? '').toUpperCase();
+    final isHod = role == AppRoles.hod;
+    final int? userDeptId = auth.userData?['department'] is int
+        ? auth.userData!['department'] as int
+        : int.tryParse(auth.userData?['department']?.toString() ?? '');
+    final String? userDeptName = auth.userData?['department_name']?.toString();
+
+    // For HOD: Filter departments to ONLY show their assigned department
+    List<AssignOption> availableDepts = state.departments;
+    if (isHod && userDeptId != null) {
+      final filtered = state.departments.where((d) => d.id == userDeptId).toList();
+      if (filtered.isNotEmpty) {
+        availableDepts = filtered;
+      } else {
+        availableDepts = [AssignOption(id: userDeptId, name: userDeptName ?? "My Department")];
+      }
+    }
+
+    // Listen for success or error
     ref.listen(assignSubjectProvider, (prev, next) {
       if (next.isSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Subjects Assigned Successfully!"), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Subjects Assigned Successfully!"), backgroundColor: Colors.green),
+        );
         context.pop();
       }
       if (next.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.red),
+        );
       }
     });
+
+    // Auto-select Department
+    if (isHod && userDeptId != null && _selectedDept != userDeptId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedDept = userDeptId;
+          });
+          _checkAndFetchSubjects();
+        }
+      });
+    } else if (_selectedDept == null && availableDepts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedDept == null) {
+          setState(() {
+            _selectedDept = availableDepts.first.id;
+          });
+          _checkAndFetchSubjects();
+        }
+      });
+    }
+
+    // Auto-select Semester
+    if (_selectedSem == null && state.semesters.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedSem == null) {
+          final sem3 = state.semesters.firstWhere((s) => s.id == 3, orElse: () => state.semesters.first);
+          setState(() {
+            _selectedSem = sem3.id;
+          });
+          _checkAndFetchSubjects();
+        }
+      });
+    }
+
+    // Auto-select Academic Year
+    if (_selectedYear == null && state.academicYears.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedYear == null) {
+          setState(() {
+            _selectedYear = state.academicYears.first.id;
+          });
+        }
+      });
+    }
+
+    // Deduplicate available subjects by subject code so DropdownMenuItem never has duplicate values
+    final uniqueSubjectMap = <String, AssignOption>{};
+    for (final s in state.availableSubjects) {
+      if (s.code != null && s.code!.isNotEmpty && !uniqueSubjectMap.containsKey(s.code)) {
+        uniqueSubjectMap[s.code!] = s;
+      }
+    }
+    final subjectList = uniqueSubjectMap.values.toList();
+
+    // Ensure at least one row exists when subjects are loaded
+    if (subjectList.isNotEmpty && _rows.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _rows.isEmpty && subjectList.isNotEmpty) {
+          setState(() {
+            _rows.add({
+              'subject': subjectList.first.code,
+              'faculty': state.faculties.isNotEmpty ? state.faculties.first.id : null,
+            });
+          });
+        }
+      });
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -113,11 +215,13 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                     _buildDropdown(
                       label: "Department",
                       value: _selectedDept,
-                      items: state.departments,
-                      onChanged: (val) {
-                        setState(() => _selectedDept = val);
-                        _checkAndFetchSubjects();
-                      },
+                      items: availableDepts,
+                      onChanged: isHod
+                          ? null
+                          : (val) {
+                              setState(() => _selectedDept = val);
+                              _checkAndFetchSubjects();
+                            },
                     ),
                     const SizedBox(height: 15),
                     _buildDropdown(
@@ -150,17 +254,17 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.add_circle, color: Color(0xFF13246E)),
                     label: const Text("Add Row", style: TextStyle(color: Color(0xFF13246E), fontWeight: FontWeight.bold)),
-                    onPressed: (state.availableSubjects.isNotEmpty && _selectedYear != null) 
+                    onPressed: (subjectList.isNotEmpty && _selectedYear != null) 
                       ? _addRow 
-                      : null, // Disable if config incomplete
+                      : null,
                   ),
                 ],
               ),
               
-              if (state.isLoading && state.availableSubjects.isEmpty && _selectedDept != null)
+              if (state.isLoading && subjectList.isEmpty && _selectedDept != null)
                 const Padding(padding: EdgeInsets.all(20.0), child: Center(child: CircularProgressIndicator())),
 
-              if (state.availableSubjects.isEmpty && _selectedDept != null && !state.isLoading)
+              if (subjectList.isEmpty && _selectedDept != null && !state.isLoading)
                 const Padding(
                   padding: EdgeInsets.all(20.0), 
                   child: Center(child: Text("No subjects found for this Department/Semester", style: TextStyle(color: Colors.grey)))
@@ -172,6 +276,12 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                 itemCount: _rows.length,
                 separatorBuilder: (c, i) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
+                  final currentSubject = _rows[index]['subject'];
+                  final safeSubjectValue = subjectList.any((s) => s.code == currentSubject) ? currentSubject : null;
+
+                  final currentFaculty = _rows[index]['faculty'];
+                  final safeFacultyValue = state.faculties.any((f) => f.id == currentFaculty) ? currentFaculty : null;
+
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
@@ -183,10 +293,13 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               hint: const Text("Select Subject"),
-                              value: _rows[index]['subject'],
+                              value: safeSubjectValue,
                               isExpanded: true,
-                              items: state.availableSubjects.map((s) {
-                                return DropdownMenuItem(value: s.code, child: Text("${s.code} - ${s.name}"));
+                              items: subjectList.map((s) {
+                                return DropdownMenuItem<String>(
+                                  value: s.code,
+                                  child: Text("${s.code} - ${s.name}", overflow: TextOverflow.ellipsis),
+                                );
                               }).toList(),
                               onChanged: (val) => setState(() => _rows[index]['subject'] = val),
                             ),
@@ -199,10 +312,13 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<int>(
                               hint: const Text("Select Faculty"),
-                              value: _rows[index]['faculty'],
+                              value: safeFacultyValue,
                               isExpanded: true,
                               items: state.faculties.map((f) {
-                                return DropdownMenuItem(value: f.id, child: Text(f.name));
+                                return DropdownMenuItem<int>(
+                                  value: f.id,
+                                  child: Text(f.name, overflow: TextOverflow.ellipsis),
+                                );
                               }).toList(),
                               onChanged: (val) => setState(() => _rows[index]['faculty'] = val),
                             ),
@@ -251,7 +367,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
     required String label,
     required int? value,
     required List<AssignOption> items,
-    required Function(int?) onChanged,
+    required Function(int?)? onChanged,
   }) {
     return DropdownButtonFormField<int>(
       decoration: InputDecoration(
@@ -260,7 +376,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
       ),
       value: value,
-      items: items.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
+      items: items.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name, overflow: TextOverflow.ellipsis))).toList(),
       onChanged: onChanged,
       validator: (val) => val == null ? "Required" : null,
     );

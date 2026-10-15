@@ -13,10 +13,10 @@ router = DefaultRouter()
 router.register(r'', AttendanceViewSet, basename='attendance')
 
 urlpatterns = [
-    # Router URLs (ViewSet handles create, fetch_students, my_stats)
-    path('', include(router.urls)),
-
     # Standalone Reporting URLs
     path('report/', AttendanceReportView.as_view(), name='attendance-report'),
     path('student/<int:student_id>/', StudentAttendanceView.as_view(), name='student-attendance-detail'),
+
+    # Router URLs (ViewSet handles create, fetch_students, my_stats)
+    path('', include(router.urls)),
 ]

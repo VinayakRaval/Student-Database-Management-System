@@ -3,14 +3,17 @@ import 'package:provider/provider.dart' as provider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:frontend/core/theme/app_theme.dart';
+import 'package:frontend/core/constants/api_constants.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
 import 'package:frontend/features/auth/screens/landing_page.dart';
+import 'package:frontend/features/reports/screens/reports_screen.dart';
 import 'package:frontend/features/auth/screens/login_page.dart';
 import 'package:frontend/features/auth/screens/forgot_password_page.dart';
 import 'package:frontend/features/dashboard/screens/dashboard_screen.dart';
 import 'package:frontend/features/profile/screens/profile_screen.dart';
 import 'package:frontend/shared/shell/responsive_shell.dart';
 import 'package:frontend/shared/screens/placeholder_screen.dart';
+import 'package:frontend/features/hod_assignment/screens/assign_hod_screen.dart';
 
 // Fee
 import 'package:frontend/features/fees/screens/fee_structure_list_screen.dart';
@@ -35,9 +38,22 @@ import 'package:frontend/features/faculty/screens/faculty_registration_screen.da
 // Attendance
 import 'package:frontend/features/attendance/screens/faculty_attendance_dashboard.dart';
 import 'package:frontend/features/attendance/screens/student_attendance_view.dart';
+import 'package:frontend/features/attendance/screens/mark_attendance_screen.dart';
 
-// Admissions
+// Admissions & Students
 import 'package:frontend/features/admissions/screens/student_registration_screen.dart';
+import 'package:frontend/features/admissions/screens/student_list_screen.dart';
+
+// IA Assessment
+import 'package:frontend/features/ia_assessment/screens/ia_marks_screen.dart';
+
+// Subjects
+import 'package:frontend/features/subjects/screens/subject_list_screen.dart';
+import 'package:frontend/features/subjects/screens/subject_add_screen.dart';
+import 'package:frontend/features/subjects/screens/assign_subject_screen.dart';
+
+// Academics & Department
+import 'package:frontend/features/academics/screens/department_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: MyApp()));
@@ -67,7 +83,7 @@ class MyApp extends StatelessWidget {
         final loggedIn = auth.isLoggedIn;
         final location = state.uri.toString();
 
-        // Public routes — no auth needed
+        // Public routes â€” no auth needed
         if (location == '/' ||
             location == '/login' ||
             location == '/forgot-password' ||
@@ -139,6 +155,23 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const StudentPaymentVerificationScreen(),
             ),
             GoRoute(
+              path: '/fees/pay/:id',
+              builder: (c, s) => FeePaymentScreen(
+                feeId: int.parse(s.pathParameters['id']!),
+              ),
+            ),
+            GoRoute(
+              path: '/timetable',
+              redirect: (context, state) {
+                final auth = provider.Provider.of<AuthProvider>(context, listen: false);
+                final role = (auth.role ?? '').toUpperCase();
+                if (role == AppRoles.professor) {
+                  return '/timetable/my-schedule';
+                }
+                return '/timetable/list';
+              },
+            ),
+            GoRoute(
               path: '/timetable/create',
               builder: (c, s) => const TimetableCreateScreen(),
             ),
@@ -166,6 +199,10 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const FacultyScheduleScreen(),
             ),
             GoRoute(
+              path: '/faculty',
+              redirect: (context, state) => '/faculty/list',
+            ),
+            GoRoute(
               path: '/faculty/register',
               builder: (c, s) => const FacultyRegistrationScreen(),
             ),
@@ -186,12 +223,38 @@ class MyApp extends StatelessWidget {
                   FacultyDetailScreen(id: int.parse(s.pathParameters['id']!)),
             ),
             GoRoute(
+              path: '/attendance',
+              redirect: (c, s) => '/attendance/faculty',
+            ),
+            GoRoute(
               path: '/attendance/faculty',
               builder: (c, s) => const FacultyAttendanceDashboard(),
             ),
             GoRoute(
+              path: '/attendance/mark/:slotId',
+              builder: (c, s) {
+                final slotId = int.tryParse(s.pathParameters['slotId'] ?? '') ?? 0;
+                final subjectName = s.extra as String?;
+                return MarkAttendanceScreen(
+                  timetableSlotId: slotId,
+                  subjectName: subjectName,
+                );
+              },
+            ),
+            GoRoute(
               path: '/attendance/student',
               builder: (c, s) => const StudentAttendanceView(),
+            ),
+            GoRoute(
+              path: '/ia/create/:subjectId',
+              builder: (c, s) {
+                final subjectId = int.tryParse(s.pathParameters['subjectId'] ?? '') ?? 0;
+                final subjectName = s.extra as String?;
+                return IAMarksScreen(
+                  subjectId: subjectId,
+                  subjectName: subjectName,
+                );
+              },
             ),
             GoRoute(
               path: '/library',
@@ -207,11 +270,11 @@ class MyApp extends StatelessWidget {
             ),
             GoRoute(
               path: '/reports',
-              builder: (c, s) => const PlaceholderScreen(title: 'Reports'),
+              builder: (c, s) => const ReportsScreen(),
             ),
             GoRoute(
               path: '/academics',
-              builder: (c, s) => const PlaceholderScreen(title: 'Academics'),
+              builder: (c, s) => const DepartmentScreen(),
             ),
             GoRoute(
               path: '/staff',
@@ -220,32 +283,33 @@ class MyApp extends StatelessWidget {
             ),
             GoRoute(
               path: '/approvals',
-              builder: (c, s) => const PlaceholderScreen(title: 'Approvals'),
+              builder: (c, s) => const StudentListScreen(),
             ),
             GoRoute(
               path: '/subjects',
-              builder: (c, s) => const PlaceholderScreen(title: 'Subjects'),
+              builder: (c, s) => const SubjectListScreen(),
             ),
             GoRoute(
               path: '/subjects/add',
-              builder: (c, s) => const PlaceholderScreen(title: 'Add Subject'),
+              builder: (c, s) => const SubjectAddScreen(),
             ),
             GoRoute(
               path: '/subjects/assign',
-              builder: (c, s) =>
-                  const PlaceholderScreen(title: 'Assign Subjects'),
+              builder: (c, s) => const AssignSubjectScreen(),
             ),
             GoRoute(
               path: '/hod/assign',
-              builder: (c, s) => const PlaceholderScreen(title: 'Assign HODs'),
+              builder: (c, s) => const AssignHodScreen(),
             ),
             GoRoute(
               path: '/admissions/list',
-              builder: (c, s) => const PlaceholderScreen(title: 'Student List'),
+              builder: (c, s) => const StudentListScreen(),
             ),
+            
           ],
         ),
       ],
     );
   }
 }
+

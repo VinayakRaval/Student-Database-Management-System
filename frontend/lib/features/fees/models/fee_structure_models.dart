@@ -58,22 +58,28 @@ class FeeStructure {
     this.components = const [],
   });
 
+  String get semesterDisplayName {
+    final s = semester.trim();
+    if (s.toLowerCase().startsWith('semester') || s.toLowerCase().startsWith('sem')) {
+      return s;
+    }
+    return 'Semester $s';
+  }
+
   factory FeeStructure.fromJson(Map<String, dynamic> json) {
     return FeeStructure(
-      id: json['id'],
-      department: json['department_name'] ?? json['department'].toString(),
-      academicYear: json['academic_year_name'] ?? json['academic_year'].toString(),
-      semester: json['semester_name'] ?? "Semester ${json['semester']}",
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
+      department: json['department_name'] ?? json['department']?.toString() ?? 'Unknown Dept',
+      academicYear: json['academic_year_name'] ?? json['academic_year']?.toString() ?? '',
+      semester: json['semester_name'] ?? (json['semester'] != null ? "Semester ${json['semester']}" : 'N/A'),
       seatType: json['seat_type']?.toString().toUpperCase() ?? 'N/A',
-      totalAmount: double.tryParse(json['total_amount'].toString()) ?? 0.0,
+      totalAmount: double.tryParse(json['total_amount']?.toString() ?? '0') ?? 0.0,
       status: json['approval_status'] ?? 'pending',
-      
-      remarks: json['rejection_remark'] ?? json['remark'],      
-      
+      remarks: json['rejection_remark'] ?? json['remark'],
       components: (json['components'] as List?)
           ?.map((e) => FeeComponentInput(
-                name: e['name'], 
-                amount: double.tryParse(e['amount'].toString()) ?? 0.0
+                name: e['name']?.toString() ?? '',
+                amount: double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0,
               ))
           .toList() ?? [],
     );

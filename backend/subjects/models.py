@@ -15,6 +15,9 @@ class Subject(models.Model):
         return f"{self.subject_code} - {self.subject_name}"
 
 
+
+    class Meta:
+        db_table = 'subject'
 class SubjectAssignment(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     faculty = models.ForeignKey(Faculty, on_delete=models.CASCADE)
@@ -24,6 +27,7 @@ class SubjectAssignment(models.Model):
 
 
     class Meta:
+        db_table = 'subject_assignment'
         unique_together = ('subject', 'faculty', 'academic_year',  'department','semester')
 
     def __str__(self):

@@ -42,7 +42,12 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
         });
       }
     } catch (e) {
-      if (mounted) context.pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load timetable: $e"), backgroundColor: Colors.red),
+        );
+        context.pop();
+      }
     }
   }
 
@@ -56,7 +61,19 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
       "slots": _slots 
     };
     final success = await ref.read(timetableProvider.notifier).updateTimetable(widget.id, payload);
-    if (success && mounted) context.go('/timetable/list'); 
+    if (success && mounted) {
+      ref.invalidate(timetableListProvider);
+      ref.invalidate(timetableDetailProvider(widget.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Timetable updated successfully!"), backgroundColor: Colors.green),
+      );
+      context.go('/timetable/list'); 
+    } else if (mounted) {
+      final err = ref.read(timetableProvider).errorMessage ?? "Failed to update timetable";
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -163,7 +180,7 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
   void _showAddSlotDialog(List<AssignmentOption> assignments) {
     if (assignments.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No subjects."))); return; }
     String selectedDay = "MON";
-    int? selectedAssignment;
+    int? selectedAssignment = assignments.isNotEmpty ? assignments.first.id : null;
     TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 30);
     TimeOfDay endTime = const TimeOfDay(hour: 10, minute: 25);
 
@@ -182,7 +199,8 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<int>(
-                decoration: const InputDecoration(labelText: "Subject"), isExpanded: true, value: selectedAssignment,
+                decoration: const InputDecoration(labelText: "Subject"), isExpanded: true,
+                value: (assignments.any((a) => a.id == selectedAssignment)) ? selectedAssignment : null,
                 items: assignments.map((a) => DropdownMenuItem(value: a.id, child: Text("${a.subjectName}\n(${a.facultyName})"))).toList(),
                 onChanged: (val) => setState(() => selectedAssignment = val),
               ),

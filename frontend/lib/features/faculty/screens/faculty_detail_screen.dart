@@ -6,6 +6,7 @@ import 'package:frontend/core/providers/auth_riverpod_bridge.dart';
 import 'package:frontend/core/constants/api_constants.dart';
 import '../providers/faculty_provider.dart';
 import '../models/faculty_model.dart';
+import '../widgets/edit_faculty_dialog.dart';
 
 class FacultyDetailScreen extends ConsumerWidget {
   final int id;
@@ -14,7 +15,7 @@ class FacultyDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncFaculty = ref.watch(facultyDetailProvider(id));
-    final role = ref.watch(authRoleProvider);
+    final role = ref.watch(authRoleProvider).value?.toUpperCase();
     final actionState = ref.watch(facultyActionProvider);
 
     return Scaffold(
@@ -27,17 +28,41 @@ class FacultyDetailScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,
+        actions: [
+          asyncFaculty.maybeWhen(
+            data: (faculty) {
+              final canEdit = role == AppRoles.hod ||
+                  role == AppRoles.principal ||
+                  role == AppRoles.system ||
+                  role == AppRoles.admission;
+              if (canEdit) {
+                return IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: Color(0xFF13246E)),
+                  tooltip: "Edit Faculty",
+                  onPressed: () => EditFacultyDialog.show(context, faculty),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
       ),
       body: asyncFaculty.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text("Error: $e")),
 
         data: (Faculty faculty) {
-          // Logic: Principal can approve if status is pending_principal
+          // Logic: Principal can approve if status is pending
           final canApprove =
-              (role == AppRoles.principal) &&
+              (role == AppRoles.principal || role == AppRoles.system) &&
               (faculty.status == 'pending_principal' ||
-                  faculty.status == 'pending_office');
+                  faculty.status == 'pending_office' ||
+                  faculty.status == 'pending');
+          final canEdit = role == AppRoles.hod ||
+              role == AppRoles.principal ||
+              role == AppRoles.system ||
+              role == AppRoles.admission;
 
           return Column(
             children: [
@@ -231,6 +256,30 @@ class FacultyDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+              if (canEdit && !canApprove)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  color: Colors.white,
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      label: const Text(
+                        "EDIT FACULTY DETAILS",
+                        style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF13246E),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => EditFacultyDialog.show(context, faculty),
                     ),
                   ),
                 ),

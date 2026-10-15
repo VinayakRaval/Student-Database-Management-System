@@ -73,6 +73,8 @@ class Faculty {
   final String? qualification;
   final String? dob;
   final String? address;
+  final int? departmentId;
+  final String? gender;
 
   Faculty({
     required this.id,
@@ -87,22 +89,39 @@ class Faculty {
     this.qualification,
     this.dob,
     this.address,
+    this.departmentId,
+    this.gender,
   });
 
   factory Faculty.fromMap(Map<String, dynamic> map) {
+    int? parsedDeptId;
+    if (map['department'] is int) {
+      parsedDeptId = map['department'] as int;
+    } else if (map['department'] is Map) {
+      parsedDeptId = map['department']['id'];
+    } else {
+      parsedDeptId = int.tryParse(map['department']?.toString() ?? '');
+    }
+
+    final deptName = map['department_name'] ?? 
+        (map['department'] is Map ? map['department']['name'] : null) ?? 
+        map['department']?.toString() ?? '';
+
     return Faculty(
       id: map['id'],
       facultyId: map['faculty_id'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
-      department: map['department'].toString(), 
+      department: deptName,
       role: map['role'] ?? 'N/A',
       status: map['status'] ?? 'pending',
       photoUrl: map['photo'],
       qualification: map['qualification'],
       dob: map['dob'],
       address: map['address'],
+      departmentId: parsedDeptId,
+      gender: map['gender'],
     );
   }
 }

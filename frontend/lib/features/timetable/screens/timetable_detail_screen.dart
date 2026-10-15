@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:provider/provider.dart' as p;
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+
 import 'package:frontend/core/constants/api_constants.dart';
 import '../providers/timetable_provider.dart';
 import '../models/timetable_model.dart';
@@ -26,8 +29,9 @@ class TimetableDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncTimetable = ref.watch(timetableDetailProvider(id));
+    final auth = p.Provider.of<AuthProvider>(context);
     final roleAsync = ref.watch(_roleProvider);
-    final role = roleAsync.value ?? 'STUDENT';
+    final role = (auth.role ?? roleAsync.value ?? 'HOD').toUpperCase();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -36,7 +40,7 @@ class TimetableDetailScreen extends ConsumerWidget {
         backgroundColor: const Color(0xFF13246E),
         foregroundColor: Colors.white,
         actions: [
-          if (role == AppRoles.hod)
+          if (role == AppRoles.hod || role == AppRoles.system)
             IconButton(
               icon: const Icon(Icons.edit),
               onPressed: () async {
@@ -69,7 +73,7 @@ class TimetableDetailScreen extends ConsumerWidget {
                   child: _buildFacultySummaryTable(timetable.slots),
                 ),
                 const SizedBox(height: 30),
-                if (role == AppRoles.principal && timetable.status == 'Pending')
+                if ((role == AppRoles.principal || role == AppRoles.hod || role == AppRoles.system) && timetable.status == 'Pending')
                   _buildActionButtons(context, ref, timetable.id),
                 const SizedBox(height: 40),
               ],

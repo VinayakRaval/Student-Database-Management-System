@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:dio/dio.dart';
 
 import 'package:frontend/core/widgets/custom_button.dart';
-import '../models/student_registration_model.dart';
 import 'package:frontend/features/admissions/providers/admission_provider.dart';
 import 'dart:typed_data';
 import 'package:frontend/core/widgets/photo_upload_card.dart';
+import 'package:frontend/core/network/api_client.dart';
+import 'package:provider/provider.dart' as p;
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/core/constants/api_constants.dart';
 
 class StudentRegistrationScreen extends ConsumerStatefulWidget {
   final int startPage;
@@ -25,7 +27,6 @@ class _StudentRegistrationScreenState
     extends ConsumerState<StudentRegistrationScreen> {
   late PageController _pageController;
   int _currentPage = 0;
-  final _formKey = GlobalKey<FormState>();
 
   String? _selectedSeatType;
 
@@ -191,7 +192,7 @@ class _StudentRegistrationScreenState
     }
     setState(() => _sendingOtp = true);
     try {
-      final dio = Dio(BaseOptions(baseUrl: 'http://127.0.0.1:8000'));
+      final dio = ApiClient().dio;
       await dio.post('/userlogin/register/send-otp/', data: {'email': email});
       setState(() => _otpSent = true);
       if (mounted)
@@ -217,7 +218,7 @@ class _StudentRegistrationScreenState
       return;
     }
     try {
-      final dio = Dio(BaseOptions(baseUrl: 'http://127.0.0.1:8000'));
+      final dio = ApiClient().dio;
       await dio.post(
         '/userlogin/register/verify-otp/',
         data: {'email': email, 'otp': otp},
@@ -321,18 +322,23 @@ class _StudentRegistrationScreenState
         .registerStudentFromMap(formMap, attachments: attachments);
     if (!mounted) return; // Add this line
     if (success != null) {
-      context.go('/dashboard');
+      final auth = p.Provider.of<AuthProvider>(context, listen: false);
+      if (auth.isLoggedIn) {
+        context.go('/admissions/list');
+      } else {
+        context.go('/login');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Registration Successful"),
+          content: Text("Student Registration Successful!"),
           backgroundColor: Colors.green,
         ),
       );
     } else {
       final error = ref
           .read(admissionProvider)
-          .errorMessage; // This may also fail
-      if (!mounted) return; // Add this too
+          .errorMessage;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error ?? "Registration Failed"),
@@ -351,7 +357,18 @@ class _StudentRegistrationScreenState
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF13246E)),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              final auth = p.Provider.of<AuthProvider>(context, listen: false);
+              if (auth.isLoggedIn) {
+                context.go('/admissions/list');
+              } else {
+                context.go('/');
+              }
+            }
+          },
         ),
         title: const Text(
           "Register new students",
@@ -390,6 +407,10 @@ class _StudentRegistrationScreenState
   }
 
   Widget _buildPage1(BuildContext context) {
+    final auth = p.Provider.of<AuthProvider>(context, listen: false);
+    final role = (auth.role ?? '').toUpperCase();
+    final isStaff = auth.isLoggedIn && (role == AppRoles.admission || role == AppRoles.principal || role == AppRoles.system || role == AppRoles.hod);
+
     return Column(
       children: [
         const Text(
@@ -467,10 +488,17 @@ class _StudentRegistrationScreenState
                                             ),
                                             child: const Text("Verify"),
                                           ),
+                                          if (isStaff) ...[
+                                            const SizedBox(width: 6),
+                                            TextButton(
+                                              onPressed: () => setState(() => _otpVerified = true),
+                                              child: const Text("Skip"),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     )
-                                  else
+                                  else ...[
                                     ElevatedButton(
                                       onPressed: _sendingOtp ? null : _sendOtp,
                                       style: ElevatedButton.styleFrom(
@@ -489,6 +517,14 @@ class _StudentRegistrationScreenState
                                             )
                                           : const Text("Send OTP"),
                                     ),
+                                    if (isStaff) ...[
+                                      const SizedBox(width: 8),
+                                      OutlinedButton(
+                                        onPressed: () => setState(() => _otpVerified = true),
+                                        child: const Text("Skip (Staff)"),
+                                      ),
+                                    ],
+                                  ],
                                 ],
                               ),
                             ),

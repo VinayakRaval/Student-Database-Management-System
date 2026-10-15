@@ -3,13 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:provider/provider.dart' as p;
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+
 import 'package:frontend/core/constants/api_constants.dart';
 import '../providers/timetable_provider.dart';
 import '../models/timetable_model.dart';
 
 final _roleProvider = FutureProvider<String?>((ref) async {
   const storage = FlutterSecureStorage();
-  return await storage.read(key: 'role');
+  return storage.read(key: 'role');
 });
 
 class TimetableListScreen extends ConsumerWidget {
@@ -19,12 +22,14 @@ class TimetableListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = p.Provider.of<AuthProvider>(context);
     final roleAsync = ref.watch(_roleProvider);
-    final role = roleAsync.value ?? 'STUDENT';
+    final role = (auth.role ?? roleAsync.value ?? 'HOD').toUpperCase();
 
-    String filter = filterType ?? 'all';
+    var filter = filterType ?? 'all';
+
     if (filterType == null) {
-      if (role == AppRoles.principal) {
+      if (role == AppRoles.principal || role == AppRoles.system) {
         filter = 'pending';
       } else if (role == AppRoles.hod) {
         filter = 'hod';
@@ -32,14 +37,18 @@ class TimetableListScreen extends ConsumerWidget {
         filter = 'faculty';
       } else if (role == AppRoles.student) {
         filter = 'student';
+      } else {
+        filter = 'hod';
       }
     }
+
+    final timetableAsync = ref.watch(timetableListProvider(filter));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text(
-          "Timetables",
+          'Timetables',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -47,59 +56,86 @@ class TimetableListScreen extends ConsumerWidget {
         elevation: 0,
         actions: [
           IconButton(
+            tooltip: 'Refresh timetables',
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref
-                .read(timetableProvider.notifier)
-                .fetchTimetables(filter: filter),
+            onPressed: () {
+              ref.invalidate(timetableListProvider(filter));
+            },
           ),
         ],
       ),
-      body: Consumer(
-        builder: (context, ref, _) {
-          final state = ref.watch(timetableProvider);
-          if (state.timetables.isEmpty &&
-              !state.isLoading &&
-              state.errorMessage == null) {
-            Future.microtask(
-              () => ref
-                  .read(timetableProvider.notifier)
-                  .fetchTimetables(filter: filter),
-            );
-          }
-          if (state.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state.errorMessage != null) {
-            return Center(child: Text("Error: ${state.errorMessage}"));
-          }
-          if (state.timetables.isEmpty) {
-            return const Center(
-              child: Text(
-                "No timetables found.",
-                style: TextStyle(color: Colors.grey),
-              ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: state.timetables.length,
-            separatorBuilder: (c, i) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = state.timetables[index];
-              return _TimetableCard(item: item);
+      body: timetableAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 12),
+                const Text(
+                  'Unable to load timetables',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(error.toString(), textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    ref.invalidate(timetableListProvider(filter));
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (timetables) {
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(timetableListProvider(filter));
+              await ref.read(timetableListProvider(filter).future);
             },
+            child: timetables.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: const [
+                      SizedBox(height: 200),
+                      Icon(
+                        Icons.calendar_month_outlined,
+                        size: 56,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          'No timetables found.',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: timetables.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      return _TimetableCard(item: timetables[index]);
+                    },
+                  ),
           );
         },
       ),
-      floatingActionButton: role == AppRoles.hod
+      floatingActionButton: (role == AppRoles.hod || role == AppRoles.system)
           ? FloatingActionButton.extended(
               heroTag: 'timetable_create_fab',
               backgroundColor: const Color(0xFF13246E),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text(
-                "Create New",
-                style: TextStyle(color: Colors.white),
-              ),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Create New'),
               onPressed: () => context.push('/timetable/create'),
             )
           : null,
@@ -109,22 +145,30 @@ class TimetableListScreen extends ConsumerWidget {
 
 class _TimetableCard extends StatelessWidget {
   final TimeTable item;
+
   const _TimetableCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    Color statusColor = Colors.orange;
-    if (item.status == 'Approved') statusColor = Colors.green;
-    if (item.status == 'Rejected') statusColor = Colors.red;
+    final status = item.status.toLowerCase();
+
+    final statusColor = status == 'approved'
+        ? Colors.green
+        : status == 'rejected'
+        ? Colors.red
+        : Colors.orange;
 
     return Card(
       elevation: 0,
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: InkWell(
-        onTap: () => context.push('/timetable/detail/${item.id}'),
+        onTap: () {
+          context.push('/timetable/detail/${item.id}');
+        },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -132,11 +176,10 @@ class _TimetableCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Text(
-                      "${item.departmentName} - Sem ${item.semesterNo}",
+                      '${item.departmentName} - Sem ${item.semesterNo}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -146,18 +189,20 @@ class _TimetableCard extends StatelessWidget {
                   const Icon(Icons.chevron_right, color: Colors.grey),
                 ],
               ),
-              const SizedBox(height: 8),
-              Row(
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
-                    "AY: ${item.academicYearLabel} • v${item.version}",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    'AY: ${item.academicYearLabel} • v${item.version}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
-                  const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 4,
+                      vertical: 5,
                     ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.1),
@@ -174,24 +219,23 @@ class _TimetableCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (item.isActive)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.check_circle, size: 14, color: Colors.green),
-                      SizedBox(width: 4),
-                      Text(
-                        "Active",
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+              if (item.isActive) ...[
+                const SizedBox(height: 10),
+                const Row(
+                  children: [
+                    Icon(Icons.check_circle, size: 15, color: Colors.green),
+                    SizedBox(width: 5),
+                    Text(
+                      'Active',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ],
             ],
           ),
         ),

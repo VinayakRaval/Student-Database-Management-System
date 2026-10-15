@@ -8,8 +8,8 @@ class IsLibraryOfficer(permissions.BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
-
-        return getattr(user, 'is_library_officer', False) or user.groups.filter(name='LibraryOfficer').exists()
+        role = getattr(user, 'role', '') or ''
+        return role.upper() == 'LIBRARY' or user.is_staff or user.is_superuser or user.groups.filter(name='LibraryOfficer').exists()
 
 
 class IsPrincipal(permissions.BasePermission):
@@ -17,4 +17,6 @@ class IsPrincipal(permissions.BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
-        return getattr(user, 'is_principal', False) or user.groups.filter(name='Principal').exists()
+        role = getattr(user, 'role', '') or ''
+        return role.upper() == 'PRINCIPAL' or user.is_staff or user.is_superuser or user.groups.filter(name='Principal').exists()
+

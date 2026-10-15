@@ -26,8 +26,10 @@ class IATestSetup(models.Model):
     max_marks = models.PositiveIntegerField()
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'ia_test_setup'
         unique_together = ("subject", "faculty", "ia_type", "ia_name")
 
     def __str__(self):
@@ -41,8 +43,10 @@ class IAMark(models.Model):
     ia_test = models.ForeignKey(IATestSetup, on_delete=models.CASCADE, related_name="marks")
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     obtained_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'ia_mark'
         unique_together = ("ia_test", "student")
 
     def __str__(self):
@@ -57,8 +61,10 @@ class IAAggregate(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     total_marks = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     average_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'ia_aggregate'
         unique_together = ("student", "subject")
 
     def __str__(self):

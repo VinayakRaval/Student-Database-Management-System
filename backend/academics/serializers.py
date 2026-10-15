@@ -13,22 +13,18 @@ class SemesterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Semester
-        fields = ["id", "name"]
+        fields = ["id", "sem_number", "name"]
 
     def get_name(self, obj):
-        return str(obj.sem_number)
-
-
-
-
-    def get_department_name(self, obj):
-        return obj.department.name if obj.department else None
+        return f"Semester {obj.sem_number}"
 
 
 class AcademicYearSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="year_name", read_only=True)
+
     class Meta:
         model = AcademicYear
-        fields = ["id", "year_name"]
+        fields = ["id", "year_name", "name"]
 
 
 class SchemaSerializer(serializers.ModelSerializer):

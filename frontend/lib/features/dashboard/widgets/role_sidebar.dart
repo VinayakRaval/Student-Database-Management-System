@@ -119,6 +119,9 @@ class _RoleSidebarState extends State<RoleSidebar> {
                           setState(
                             () => expanded[index] = !(expanded[index] ?? false),
                           );
+                          if (item['route'] != null && item['route'] != currentRoute) {
+                            context.go(item['route']);
+                          }
                         } else {
                           context.go(item['route']);
                         }

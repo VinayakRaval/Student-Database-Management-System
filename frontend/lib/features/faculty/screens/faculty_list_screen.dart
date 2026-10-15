@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:frontend/core/constants/api_constants.dart';
 import '../providers/faculty_provider.dart';
 import '../models/faculty_model.dart';
+import '../widgets/edit_faculty_dialog.dart';
 
 final _storage = const FlutterSecureStorage();
 
@@ -182,19 +183,32 @@ class _FacultyCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              InkWell(
-                onTap: () => context.push('/faculty/detail/${item.id}'),
-                child: const Padding(
-                  padding: EdgeInsets.all(4.0),
-                  child: Text(
-                    "View >",
-                    style: TextStyle(
-                      color: Color(0xFF13246E),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF13246E)),
+                    tooltip: "Edit Faculty",
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => EditFacultyDialog.show(context, item),
+                  ),
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: () => context.push('/faculty/detail/${item.id}'),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4.0),
+                      child: Text(
+                        "View >",
+                        style: TextStyle(
+                          color: Color(0xFF13246E),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ],
           ),

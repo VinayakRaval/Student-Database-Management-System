@@ -71,6 +71,7 @@ class BookCopy(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        db_table = 'library_book_copy'
         unique_together = (('book', 'copy_number'),)
         ordering = ('book', 'copy_number')
 
@@ -137,6 +138,9 @@ class BookRequest(models.Model):
         return f"Request: {self.title} by {self.requester} [{self.status}]"
 
 # ---------- IssueRecord ----------
+
+    class Meta:
+        db_table = 'library_book_request'
 class IssueRecord(models.Model):
     STATUS_ISSUED = 'issued'
     STATUS_RETURNED = 'returned'
@@ -155,6 +159,9 @@ class IssueRecord(models.Model):
         return f"{self.issue_id} - {self.copy} to {self.borrower}"
 
 # ---------- Fine ----------
+
+    class Meta:
+        db_table = 'library_issue_record'
 class Fine(models.Model):
     issue = models.ForeignKey(IssueRecord, related_name='fines', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
@@ -178,6 +185,7 @@ class AuditLog(models.Model):
     extra = models.JSONField(null=True, blank=True)
 
     class Meta:
+        db_table = 'library_audit_log'
         ordering = ['-timestamp']
 
     def __str__(self):

@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/legacy.dart';
+import 'package:frontend/core/network/api_client.dart';
 import 'dart:typed_data';
 
-final _publicDio = Dio(BaseOptions(baseUrl: 'http://127.0.0.1:8000'));
+Dio get _publicDio => ApiClient().dio;
 
 // --- DROPDOWN PROVIDERS ---
 final departmentsProvider =

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:http_parser/http_parser.dart';
 import '../../../core/network/api_client.dart';
 import '../models/student_fee_model.dart';

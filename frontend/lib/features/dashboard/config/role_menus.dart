@@ -59,6 +59,11 @@ class RoleMenus {
             ],
           },
           {
+            'title': 'Mark Attendance',
+            'icon': Icons.check_circle_outline_rounded,
+            'route': '/attendance/faculty',
+          },
+          {
             'title': 'Faculty',
             'icon': Icons.school_rounded,
             'route': '/faculty',
@@ -86,11 +91,15 @@ class RoleMenus {
       // --- FACULTY ROLE ---
       case AppRoles.professor:
         menu.addAll([
-          // NEW: Points to the specific faculty schedule screen
           {
             'title': 'My Timetable',
             'icon': Icons.calendar_today_rounded,
             'route': '/timetable/my-schedule',
+          },
+          {
+            'title': 'My Subjects',
+            'icon': Icons.library_books_rounded,
+            'route': '/subjects',
           },
           {
             'title': 'Mark Attendance',
@@ -109,6 +118,11 @@ class RoleMenus {
             'route': '/approvals',
             'children': [
               {
+                'title': 'Student Registrations',
+                'icon': Icons.person_add_alt_1_rounded,
+                'route': '/admissions/list',
+              },
+              {
                 'title': 'Faculty Approvals',
                 'icon': Icons.how_to_reg_rounded,
                 'route': '/faculty/approvals',
@@ -124,6 +138,11 @@ class RoleMenus {
                 'route': '/timetable/approvals',
               },
             ],
+          },
+          {
+            'title': 'Student Directory',
+            'icon': Icons.people_alt_rounded,
+            'route': '/admissions/list',
           },
           {
             'title': 'Faculty Directory',
@@ -225,7 +244,7 @@ class RoleMenus {
           {
             'title': 'Fee Details',
             'icon': Icons.monetization_on_rounded,
-            'route': '/fees',
+            'route': '/fees/my-fees',
           },
           {
             'title': 'Library',
@@ -249,3 +268,4 @@ class RoleMenus {
     return menu;
   }
 }
+

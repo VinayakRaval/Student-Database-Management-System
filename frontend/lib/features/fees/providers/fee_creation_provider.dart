@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/network/api_client.dart';
 import '../models/fee_structure_models.dart';
 
@@ -100,18 +100,7 @@ class FeeCreationNotifier extends StateNotifier<FeeCreationState> {
     state = state.copyWith(isLoading: true);
 
     try {
-      const storage = FlutterSecureStorage();
-      final token = await storage.read(
-        key: 'access',
-      ); // Changed from access_token
-
-      print("TOKEN: ${token?.substring(0, 15)}...");
-
-      if (token == null) {
-        print("NO TOKEN FOUND");
-        state = state.copyWith(isLoading: false);
-        return false;
-      }
+      final dio = ApiClient().dio;
 
       final payload = {
         "department": deptId,
@@ -119,32 +108,19 @@ class FeeCreationNotifier extends StateNotifier<FeeCreationState> {
         "semester": semId,
         "seat_type": seatType,
         "total_amount": state.totalAmount,
-        "components": state.components.map((e) => e.toJson()).toList(),
+        "components": state.components
+            .where((e) => e.name.trim().isNotEmpty)
+            .map((e) => e.toJson())
+            .toList(),
       };
 
-      print("PAYLOAD: $payload");
-
-      final dio = Dio();
       final url = id == null
-          ? 'http://127.0.0.1:8000/fees/fee-structures/'
-          : 'http://127.0.0.1:8000/fees/fee-structures/$id/';
+          ? '/fees/fee-structures/'
+          : '/fees/fee-structures/$id/';
 
-      print("URL: $url");
-
-      final response = await (id == null ? dio.post : dio.put)(
-        url,
-        data: payload,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          validateStatus: (status) => status! < 500,
-        ),
-      );
-
-      print("STATUS: ${response.statusCode}");
-      print("RESPONSE: ${response.data}");
+      final response = await (id == null
+          ? dio.post(url, data: payload, options: Options(validateStatus: (s) => s != null && s < 500))
+          : dio.put(url, data: payload, options: Options(validateStatus: (s) => s != null && s < 500)));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         state = state.copyWith(isLoading: false);

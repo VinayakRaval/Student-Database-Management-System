@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../../core/network/api_client.dart';
 import '../providers/fee_creation_provider.dart';
 import '../providers/fee_action_provider.dart';
 import '../models/fee_structure_models.dart';
@@ -107,26 +106,19 @@ class _FeeStructureCreateScreenState
     if (result == null || result.isEmpty) return;
 
     try {
-      const storage = FlutterSecureStorage();
-      final token = await storage.read(key: 'access');
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: 'http://127.0.0.1:8000',
-          headers: {'Authorization': 'Bearer $token'},
-        ),
-      );
+      final dio = ApiClient().dio;
       await dio.post(endpoint, data: {fieldName: result});
       ref.invalidate(provider);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("$label '$result' added!")));
+        ).showSnackBar(SnackBar(content: Text("$label '$result' added!"), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
       }
     }
   }

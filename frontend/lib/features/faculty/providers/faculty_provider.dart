@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/faculty_model.dart';
 
@@ -131,6 +132,18 @@ class FacultyActionController extends StateNotifier<FacultyActionState> {
     } catch (e) {
       state = const FacultyActionState(isLoading: false);
       return false; 
+    }
+  }
+
+  Future<bool> updateFaculty(int id, Map<String, dynamic> data) async {
+    state = const FacultyActionState(isLoading: true);
+    try {
+      await _dio.patch('/faculty/faculties/$id/', data: data);
+      state = const FacultyActionState(isLoading: false);
+      return true;
+    } catch (e) {
+      state = const FacultyActionState(isLoading: false);
+      return false;
     }
   }
 }

@@ -364,7 +364,7 @@ class _FeePaymentScreenState extends ConsumerState<FeePaymentScreen> {
                             final feeSuccess = await uploadNotifier
                                 .submitPayment(
                                   studentId: studentId,
-                                  feeStructureId: feeStructId!,
+                                  feeStructureId: feeStructId,
                                   mode: _mode,
                                   txnId: _txnCtrl.text,
                                   fileBytes: _receiptBytes!,

@@ -16,19 +16,20 @@ from .serializers import (
     FeeReceiptSerializer,
 )
 
-# ---------- Role-based Permissions ----------
 class IsRole(permissions.BasePermission):
     """
-    Allows access only to users with specific roles.
+    Allows access only to users with specific roles, staff, or superusers.
     """
     allowed_roles = []
 
     def has_permission(self, request, view):
-        return bool(
-            request.user and
-            request.user.is_authenticated and
-            request.user.role in getattr(view, "allowed_roles", self.allowed_roles)
-        )
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        allowed = getattr(view, "allowed_roles", self.allowed_roles)
+        user_role = getattr(request.user, "role", "") or ""
+        return user_role in allowed or user_role.upper() in [r.upper() for r in allowed]
 
 
 class IsAccounts(IsRole):
@@ -37,6 +38,7 @@ class IsAccounts(IsRole):
 
 class IsPrincipal(IsRole):
     allowed_roles = ["PRINCIPAL"]
+
 
 
 # ---------- FeeStructure ----------
@@ -59,7 +61,8 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def approve(self, request, pk=None):
         # Only Principal can approve
-        if not request.user or getattr(request.user, "role", None) != "PRINCIPAL":
+        user_role = (getattr(request.user, "role", "") or "").upper()
+        if user_role != "PRINCIPAL" and not request.user.is_staff and not request.user.is_superuser:
             return Response({"detail": "Only Principal can approve."}, status=403)
 
         fs = self.get_object()
@@ -74,8 +77,12 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         # ---- Map seat_type if needed ----
         seat_map = {
             "gm": "general_merit",
+            "general_merit": "general_merit",
             "snq": "snq",
-            "Lateral": "lateral"
+            "lateral": "lateral",
+            "Lateral": "lateral",
+            "management": "management",
+            "nri": "nri",
         }
         student_seat_type = seat_map.get(fs.seat_type, fs.seat_type)
 
@@ -103,8 +110,9 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def reject(self, request, pk=None):
-    # Only Principal can reject
-        if request.user.role != "PRINCIPAL":
+        # Only Principal can reject
+        user_role = (getattr(request.user, "role", "") or "").upper()
+        if user_role != "PRINCIPAL" and not request.user.is_staff and not request.user.is_superuser:
             return Response({"detail": "Only Principal can reject."}, status=403)
 
         fs = self.get_object()
@@ -165,7 +173,7 @@ class StudentFeeViewSet(viewsets.ModelViewSet):
         students = Student.objects.filter(
             department=department,
             semester=semester,
-            is_active=True,
+            status__iexact="active",
             seat_type=seat_type
         )
 
@@ -183,50 +191,47 @@ class StudentFeeViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="my-fees")
     def my_fees(self, request):
         """
-        Returns overview of all fees assigned to the logged-in student.
-        Only basic info like id, semester, academic_year, status, balance.
+        Returns overview of all fees assigned to the logged-in student,
+        including complete fee breakdown components.
         """
         try:
             student = request.user.student
         except Exception:
             return Response({"detail": "Student profile not found."}, status=404)
 
-        fees = StudentFee.objects.filter(student=student)
-        # Only select overview fields
-        data = [
-            {
-                "id": f.id,
-                "semester": str(f.fee_structure.semester.sem_number),
-                "academic_year": str(f.fee_structure.academic_year.year_name),
-                "status": f.status,
-                "balance_amount": f.balance_amount,
-                "total_fee": f.total_amount,
-            }
-            for f in fees
-        ]
-        return Response(data)
+        fees = StudentFee.objects.filter(student=student).select_related(
+            "fee_structure", "fee_structure__semester", "fee_structure__academic_year"
+        ).prefetch_related("fee_structure__components")
+        return Response(StudentFeeSerializer(fees, many=True).data)
 
 
 # ---------- FeePayment ----------
 class FeePaymentViewSet(viewsets.ModelViewSet):
-    queryset = FeePayment.objects.select_related("student_fee")
+    queryset = FeePayment.objects.select_related(
+        "student_fee",
+        "student_fee__student",
+        "student_fee__student__department",
+        "student_fee__fee_structure",
+        "student_fee__fee_structure__academic_year",
+        "student_fee__fee_structure__semester"
+    )
     serializer_class = FeePaymentSerializer
 
     def get_permissions(self):
-        if self.action == "verify":
+        if self.action in ["verify", "reject"]:
             return [IsAccounts()]
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
         serializer.save(entered_by=self.request.user)
         sf = serializer.instance.student_fee
-        # Additional logic if needed
 
     # -------------------- VERIFY PAYMENT --------------------
     @action(detail=True, methods=["post"], url_path="verify")
     @transaction.atomic
     def verify(self, request, pk=None):
-        if request.user.role != "ACCOUNTS":
+        user_role = (getattr(request.user, "role", "") or "").upper()
+        if user_role != "ACCOUNTS" and not request.user.is_staff and not request.user.is_superuser:
             return Response(
                 {"detail": "Only Accounts can verify payments."},
                 status=403
@@ -259,13 +264,24 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         )
         sf.save()
 
-        # Optional: send notification
-        if getattr(sf.student, "user_id", None):
-            AppNotification.objects.create(
-                user_id=sf.student.user_id,
-                title="Payment Verified",
-                body=f"Payment of {payment.amount} verified. Receipt {receipt.receipt_no} issued."
-            )
+        # Optional: send notification safely if model exists
+        try:
+            if getattr(sf.student, "user_id", None):
+                # Try getting Notification model if present
+                from django.apps import apps
+                NotificationModel = None
+                for model in apps.get_models():
+                    if model.__name__ in ["AppNotification", "Notification"]:
+                        NotificationModel = model
+                        break
+                if NotificationModel:
+                    NotificationModel.objects.create(
+                        user_id=sf.student.user_id,
+                        title="Payment Verified",
+                        body=f"Payment of {payment.amount} verified. Receipt {receipt.receipt_no} issued."
+                    )
+        except Exception:
+            pass
 
         return Response({"receipt_no": receipt.receipt_no})
 
@@ -273,7 +289,8 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="reject")
     @transaction.atomic
     def reject(self, request, pk=None):
-        if request.user.role != "ACCOUNTS":
+        role = getattr(request.user, "role", "") or ""
+        if role.upper() != "ACCOUNTS" and not request.user.is_staff and not request.user.is_superuser:
             return Response(
                 {"detail": "Only Accounts can reject payments."},
                 status=403
@@ -295,10 +312,8 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
             )
 
         # Update rejection details
-        payment.rejected = True
-        payment.rejection_remark = remark
-        payment.rejected_by = request.user
-        payment.rejected_on = timezone.now()
+        payment.verified = False
+        payment.remark = f"Rejected: {remark}"
         payment.save()
 
         # Update StudentFee status
@@ -306,13 +321,23 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         sf.status = StudentFee.Status.PENDING
         sf.save()
 
-        # Notify student
-        if getattr(sf.student, "user_id", None):
-            AppNotification.objects.create(
-                user_id=sf.student.user_id,
-                title="Payment Rejected",
-                body=f"Your payment of {payment.amount} was rejected. Reason: {remark}"
-            )
+        # Notify student safely
+        try:
+            if getattr(sf.student, "user_id", None):
+                from django.apps import apps
+                NotificationModel = None
+                for model in apps.get_models():
+                    if model.__name__ in ["AppNotification", "Notification"]:
+                        NotificationModel = model
+                        break
+                if NotificationModel:
+                    NotificationModel.objects.create(
+                        user_id=sf.student.user_id,
+                        title="Payment Rejected",
+                        body=f"Your payment of {payment.amount} was rejected. Reason: {remark}"
+                    )
+        except Exception:
+            pass
 
         return Response(
             {
@@ -329,7 +354,7 @@ class FeeReceiptViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FeeReceipt.objects.select_related(
         "payment",
         "payment__student_fee",
-        "payment_student_fee_student"
+        "payment__student_fee__student"
     )
     serializer_class = FeeReceiptSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -338,5 +363,5 @@ class FeeReceiptViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset()
         student_id = self.request.query_params.get("student_id")
         if student_id:
-            qs = qs.filter(payment_student_fee_student_id=student_id)
-        return qs
+            qs = qs.filter(payment__student_fee__student_id=student_id)
+        return qs

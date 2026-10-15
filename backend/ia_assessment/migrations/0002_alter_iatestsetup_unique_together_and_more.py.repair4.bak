@@ -1,0 +1,6 @@
+from django.conf import settings
+from django.db import migrations
+
+class Migration(migrations.Migration):
+    dependencies = [('ia_assessment', '0001_initial'), ('subjects', '0001_initial'), migrations.swappable_dependency(settings.AUTH_USER_MODEL)]
+    operations = [migrations.AlterUniqueTogether(name='iatestsetup', unique_together={('subject', 'faculty', 'ia_type', 'ia_name')}), migrations.SeparateDatabaseAndState(database_operations=[], state_operations=[migrations.RemoveField(model_name='iatestsetup', name='academic_year')]), migrations.SeparateDatabaseAndState(database_operations=[], state_operations=[migrations.RemoveField(model_name='iatestsetup', name='department')]), migrations.SeparateDatabaseAndState(database_operations=[], state_operations=[migrations.RemoveField(model_name='iatestsetup', name='semester')])]

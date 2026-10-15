@@ -18,7 +18,7 @@ class StudentAttendanceCard extends StatelessWidget {
       elevation: 1,
       shape: RoundedRectangleBorder(
         side: BorderSide(
-          color: student.isPresent ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5),
+          color: student.isPresent ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.5),
           width: 1,
         ),
         borderRadius: BorderRadius.circular(8),

@@ -106,7 +106,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 else if (_error != null)
                   Center(child: Text("Error: $_error"))
                 else if (_dashboardData != null &&
-                    _dashboardData!['cards'] != null)
+                    _dashboardData!['cards'] != null &&
+                    (_dashboardData!['cards'] as List).isNotEmpty)
                   _buildCards(
                     _dashboardData!['cards'] as List,
                     constraints.maxWidth,
@@ -151,19 +152,109 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double availableWidth,
   ) {
     List<Map<String, dynamic>> cards = [];
-    if (role == AppRoles.accounts) {
+    final upperRole = role.toUpperCase();
+
+    if (upperRole == AppRoles.hod) {
+      cards = [
+        {
+          'title': 'Dept Students',
+          'value': 'View',
+          'icon': 'people',
+          'color': 'navy',
+          'route': '/admissions/list',
+        },
+        {
+          'title': 'Department Hub',
+          'value': 'Manage',
+          'icon': 'checklist',
+          'color': 'teal',
+          'route': '/academics',
+        },
+        {
+          'title': 'Dept Subjects',
+          'value': 'Curriculum',
+          'icon': 'book',
+          'color': 'blue',
+          'route': '/subjects',
+        },
+        {
+          'title': 'Attendance',
+          'value': 'Mark',
+          'icon': 'check',
+          'color': 'green',
+          'route': '/attendance/faculty',
+        },
+      ];
+    } else if (upperRole == AppRoles.principal || upperRole == AppRoles.system) {
+      cards = [
+        {
+          'title': 'Students',
+          'value': 'Directory',
+          'icon': 'people',
+          'color': 'navy',
+          'route': '/admissions/list',
+        },
+        {
+          'title': 'Faculty',
+          'value': 'Directory',
+          'icon': 'people',
+          'color': 'teal',
+          'route': '/faculty/list',
+        },
+        {
+          'title': 'Approvals',
+          'value': 'Review',
+          'icon': 'checklist',
+          'color': 'orange',
+          'route': '/approvals',
+        },
+        {
+          'title': 'Reports',
+          'value': 'Analytics',
+          'icon': 'notifications',
+          'color': 'blue',
+          'route': '/reports',
+        },
+      ];
+    } else if (upperRole == AppRoles.professor) {
+      cards = [
+        {
+          'title': 'My Schedule',
+          'value': 'Timetable',
+          'icon': 'checklist',
+          'color': 'teal',
+          'route': '/timetable/my-schedule',
+        },
+        {
+          'title': 'My Subjects',
+          'value': 'Assigned',
+          'icon': 'book',
+          'color': 'blue',
+          'route': '/subjects',
+        },
+        {
+          'title': 'Mark Attendance',
+          'value': 'Today',
+          'icon': 'check',
+          'color': 'green',
+          'route': '/attendance/faculty',
+        },
+      ];
+    } else if (upperRole == AppRoles.accounts) {
       cards = [
         {
           'title': 'Fee Structures',
           'value': 'Active',
           'icon': 'monetization',
           'color': 'green',
+          'route': '/fees',
         },
         {
           'title': 'Pending Payments',
           'value': 'Review',
           'icon': 'pending',
           'color': 'orange',
+          'route': '/fees/student-payments',
         },
         {
           'title': 'Quick Action',
@@ -173,19 +264,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'route': '/fees/create',
         },
       ];
-    } else if (role == AppRoles.admission) {
+    } else if (upperRole == AppRoles.admission) {
       cards = [
         {
           'title': 'Students',
           'value': 'Active',
           'icon': 'people',
           'color': 'navy',
+          'route': '/admissions/list',
         },
         {
           'title': 'Pending',
           'value': 'Verify',
           'icon': 'checklist',
           'color': 'teal',
+          'route': '/admissions/list',
         },
         {
           'title': 'Quick Action',
@@ -195,21 +288,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'route': '/admissions/register',
         },
       ];
-    } else if (role == AppRoles.student) {
+    } else if (upperRole == AppRoles.student) {
       cards = [
         {
           'title': 'Attendance',
           'value': 'View',
           'icon': 'check',
           'color': 'green',
+          'route': '/attendance/student',
         },
         {
-          'title': 'Fees',
+          'title': 'Fee Details',
           'value': 'Details',
           'icon': 'money',
           'color': 'orange',
+          'route': '/fees/my-fees',
         },
-        {'title': 'Library', 'value': 'Books', 'icon': 'book', 'color': 'blue'},
+        {
+          'title': 'Library',
+          'value': 'Books',
+          'icon': 'book',
+          'color': 'blue',
+          'route': '/library',
+        },
       ];
     } else {
       cards = [

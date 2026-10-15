@@ -1,6 +1,16 @@
+
 from django.db import models
 
-class Department(models.Model):
+
+class TimestampedModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class Department(TimestampedModel):
     name = models.CharField(max_length=100, unique=True)
 
     class Meta:
@@ -11,8 +21,9 @@ class Department(models.Model):
     def __str__(self):
         return self.name
 
-class Semester(models.Model):
-    sem_number = models.IntegerField(default=1)  # Provide default here
+
+class Semester(TimestampedModel):
+    sem_number = models.IntegerField(default=1)
 
     class Meta:
         db_table = "semester"
@@ -23,9 +34,8 @@ class Semester(models.Model):
         return f"Semester {self.sem_number}"
 
 
-class AcademicYear(models.Model):
-    year_name = models.CharField(max_length=20, unique=True)  # e.g., "2025-2026"
-    
+class AcademicYear(TimestampedModel):
+    year_name = models.CharField(max_length=20, unique=True)
 
     class Meta:
         db_table = "academic_year"
@@ -36,10 +46,14 @@ class AcademicYear(models.Model):
         return self.year_name
 
 
-class Schema(models.Model):
-    name = models.CharField(max_length=100, unique=True)  # e.g., "CSE-2025"
+class Schema(TimestampedModel):
+    name = models.CharField(max_length=100, unique=True)
     department = models.ForeignKey(
-        Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="schemas"
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="schemas",
     )
 
     class Meta:
@@ -48,5 +62,7 @@ class Schema(models.Model):
         verbose_name_plural = "Schemas"
 
     def __str__(self):
-        return f"{self.name} ({self.department.name if self.department else 'No Department'})"
-    
+        return (
+            f"{self.name} "
+            f"({self.department.name if self.department else 'No Department'})"
+        )

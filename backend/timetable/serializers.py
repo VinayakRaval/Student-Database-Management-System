@@ -10,22 +10,35 @@ class TimeTableSlotSerializer(serializers.ModelSerializer):
         model = TimeTableSlot
         fields = ["id", "day", "start_time", "end_time", "assignment", "assignment_info"]
 
+    def validate(self, data):
+        start = data.get("start_time")
+        end = data.get("end_time")
+        if start and end and start >= end:
+            raise serializers.ValidationError("Start time must be before end time.")
+        return data
+
     def get_assignment_info(self, obj):
         a = obj.assignment
+        if not a:
+            return None
+        subject = getattr(a, "subject", None)
+        faculty = getattr(a, "faculty", None)
+        semester = getattr(a, "semester", None) or getattr(subject, "semester", None)
+        academic_year = getattr(a, "academic_year", None)
+
         return {
             "id": a.id,
-            "subject_code": getattr(a.subject, "subject_code", None),
-            "subject_name": getattr(a.subject, "subject_name", None),
-            "faculty_id": getattr(a.faculty, "id", None),
-            # FIX: Use .name directly
-            "faculty_name": getattr(a.faculty, "name", "Unknown"), 
-            "semester": getattr(a.subject.semester, "sem_number", None),
-            "academic_year": getattr(a.academic_year, "year_name", None),
+            "subject_code": getattr(subject, "subject_code", None),
+            "subject_name": getattr(subject, "subject_name", None),
+            "faculty_id": getattr(faculty, "id", None),
+            "faculty_name": getattr(faculty, "name", "Unknown"), 
+            "semester": getattr(semester, "sem_number", None),
+            "academic_year": getattr(academic_year, "year_name", None),
         }
 
 # --- TIMETABLE SERIALIZER ---
 class TimeTableSerializer(serializers.ModelSerializer):
-    slots = TimeTableSlotSerializer(many=True)
+    slots = TimeTableSlotSerializer(many=True, required=False)
     
     # Read-Only Display Fields
     department_name = serializers.CharField(source="department.name", read_only=True)
@@ -34,7 +47,6 @@ class TimeTableSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TimeTable
-        # FIX: Explicitly included 'semester_no' to prevent 500 Error
         fields = [
             "id", 
             "department", 
@@ -54,35 +66,53 @@ class TimeTableSerializer(serializers.ModelSerializer):
             "slots",
         ]
         read_only_fields = ("version", "created_by", "created_at", "approved_by", "approved_at", "is_active")
+        extra_kwargs = {
+            "department": {"required": False},
+            "semester": {"required": False},
+            "academic_year": {"required": False},
+        }
 
     def validate(self, data):
-        slots = data.get("slots", [])
+        slots = data.get("slots", None)
         # Handle instance for Update vs Create
         if self.instance:
-            academic_year = data.get("academic_year", self.instance.academic_year)
             dept = data.get("department", self.instance.department)
             sem = data.get("semester", self.instance.semester)
+            academic_year = data.get("academic_year", self.instance.academic_year)
         else:
-            academic_year = data.get("academic_year")
             dept = data.get("department")
             sem = data.get("semester")
+            academic_year = data.get("academic_year")
+            if not dept or not sem or not academic_year:
+                raise serializers.ValidationError("department, semester, and academic_year are required.")
 
-        for slot in slots:
-            assign_id = slot.get("assignment")
-            if not assign_id:
-                raise serializers.ValidationError("Each slot must include an assignment id.")
+        if slots is not None:
+            dept_id = getattr(dept, "id", dept)
+            sem_id = getattr(sem, "id", sem)
+            ay_id = getattr(academic_year, "id", academic_year)
 
-            try:
-                sa = SubjectAssignment.objects.get(pk=assign_id.id if hasattr(assign_id, "id") else assign_id)
-            except SubjectAssignment.DoesNotExist:
-                raise serializers.ValidationError(f"SubjectAssignment {assign_id} does not exist.")
+            for slot in slots:
+                assign_id = slot.get("assignment")
+                if not assign_id:
+                    raise serializers.ValidationError("Each slot must include an assignment id.")
 
-            if sa.subject.department != dept:
-                raise serializers.ValidationError("Assignment department mismatch.")
-            if sa.subject.semester != sem:
-                raise serializers.ValidationError("Assignment semester mismatch.")
-            if sa.academic_year != academic_year:
-                raise serializers.ValidationError("Assignment academic year mismatch.")
+                try:
+                    sa = SubjectAssignment.objects.select_related(
+                        "subject", "subject__department", "subject__semester", "department", "semester", "academic_year"
+                    ).get(pk=assign_id.id if hasattr(assign_id, "id") else assign_id)
+                except SubjectAssignment.DoesNotExist:
+                    raise serializers.ValidationError(f"SubjectAssignment {assign_id} does not exist.")
+
+                sa_dept_id = getattr(sa.department, "id", sa.department_id) or getattr(getattr(sa.subject, "department", None), "id", None)
+                sa_sem_id = getattr(sa.semester, "id", sa.semester_id) or getattr(getattr(sa.subject, "semester", None), "id", None)
+                sa_ay_id = getattr(sa.academic_year, "id", sa.academic_year_id)
+
+                if dept_id and sa_dept_id and sa_dept_id != dept_id:
+                    raise serializers.ValidationError("Assignment department mismatch.")
+                if sem_id and sa_sem_id and sa_sem_id != sem_id:
+                    raise serializers.ValidationError("Assignment semester mismatch.")
+                if ay_id and sa_ay_id and sa_ay_id != ay_id:
+                    raise serializers.ValidationError("Assignment academic year mismatch.")
 
         return data
 
@@ -102,6 +132,17 @@ class TimeTableSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         instance.remarks = validated_data.get('remarks', instance.remarks)
+        if 'department' in validated_data:
+            instance.department = validated_data['department']
+        if 'semester' in validated_data:
+            instance.semester = validated_data['semester']
+        if 'academic_year' in validated_data:
+            instance.academic_year = validated_data['academic_year']
+
+        if instance.status in ["Approved", "Rejected"]:
+            instance.status = "Pending"
+            instance.is_active = False
+
         instance.save()
 
         slots_data = validated_data.get('slots')
@@ -117,13 +158,36 @@ class TimeTableSerializer(serializers.ModelSerializer):
 class FacultyScheduleSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source="assignment.subject.subject_name", read_only=True)
     subject_code = serializers.CharField(source="assignment.subject.subject_code", read_only=True)
-    branch_name = serializers.CharField(source="assignment.subject.department.name", read_only=True)
-    semester = serializers.IntegerField(source="assignment.subject.semester.sem_number", read_only=True)
+    branch_name = serializers.SerializerMethodField(read_only=True)
+    faculty_name = serializers.SerializerMethodField(read_only=True)
+    semester = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = TimeTableSlot
         fields = [
             "id", "day", "start_time", "end_time", 
             "subject_name", "subject_code", 
-            "branch_name", "semester"
+            "branch_name", "faculty_name", "semester"
         ]
+
+    def get_branch_name(self, obj):
+        if obj.assignment and obj.assignment.subject and obj.assignment.subject.department:
+            return obj.assignment.subject.department.name
+        if obj.timetable and obj.timetable.department:
+            return obj.timetable.department.name
+        return ""
+
+    def get_faculty_name(self, obj):
+        if obj.assignment and obj.assignment.faculty:
+            return obj.assignment.faculty.name
+        return "Not Assigned"
+
+    def get_semester(self, obj):
+        a = obj.assignment
+        if a:
+            sem = getattr(a.semester, "sem_number", None) or getattr(getattr(a.subject, "semester", None), "sem_number", None)
+            if sem:
+                return sem
+        if obj.timetable and obj.timetable.semester:
+            return obj.timetable.semester.sem_number
+        return None

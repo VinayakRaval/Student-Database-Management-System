@@ -27,6 +27,7 @@ class TimeTable(models.Model):
     remarks = models.TextField(null=True, blank=True)
 
     class Meta:
+        db_table = 'timetable'
         ordering = ("-created_at",)
 
     def save(self, *args, **kwargs):
@@ -80,6 +81,7 @@ class TimeTableSlot(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        db_table = 'timetable_slot'
         unique_together = ("timetable", "day", "start_time", "end_time", "assignment")
 
     def clean(self):
@@ -106,3 +108,6 @@ class TimeTableApprovalHistory(models.Model):
 
     def __str__(self):
         return f"{self.timetable} {self.action} by {self.action_by} at {self.action_at}"
+
+    class Meta:
+        db_table = 'timetable_approval_history'

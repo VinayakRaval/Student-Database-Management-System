@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
+import 'package:frontend/core/network/api_client.dart';
 import '../models/attendance_stats_model.dart';
 
 // Simple FutureProvider for fetching stats
 final studentStatsProvider = FutureProvider.autoDispose<List<AttendanceStatsModel>>((ref) async {
-  final dio = Dio(); // Replace with your global API client
-  // Adjust URL to your backend
-  final response = await dio.get('http://your-api-url/api/attendance/my_stats/'); 
-  
-  return (response.data as List)
-      .map((e) => AttendanceStatsModel.fromJson(e))
-      .toList();
+  try {
+    final dio = ApiClient().dio;
+    final response = await dio.get('/attendance/my_stats/'); 
+    
+    List rawList = [];
+    if (response.data is List) {
+      rawList = response.data;
+    } else if (response.data is Map && response.data['results'] is List) {
+      rawList = response.data['results'];
+    }
+
+    return rawList
+        .map((e) => AttendanceStatsModel.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  } catch (e) {
+    debugPrint("Error fetching attendance stats: $e");
+    return [];
+  }
 });
 
 class StudentAttendanceView extends ConsumerWidget {
@@ -27,20 +38,71 @@ class StudentAttendanceView extends ConsumerWidget {
         title: const Text("My Attendance"),
         backgroundColor: const Color(0xFF13246E),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: "Refresh Attendance",
+            onPressed: () => ref.refresh(studentStatsProvider),
+          ),
+        ],
       ),
       body: statsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text("Error: $err")),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 12),
+              Text("Error: $err"),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.refresh),
+                label: const Text("Retry"),
+                onPressed: () => ref.refresh(studentStatsProvider),
+              ),
+            ],
+          ),
+        ),
         data: (stats) {
           if (stats.isEmpty) {
-            return const Center(child: Text("No attendance records found."));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.pie_chart_outline_rounded, size: 64, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "No attendance records found yet.",
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text("Refresh"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF13246E),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => ref.refresh(studentStatsProvider),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: stats.length,
-            itemBuilder: (context, index) {
-              return _AttendanceStatCard(stat: stats[index]);
-            },
+          return RefreshIndicator(
+            onRefresh: () async => ref.refresh(studentStatsProvider),
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: stats.length,
+              itemBuilder: (context, index) {
+                return _AttendanceStatCard(stat: stats[index]);
+              },
+            ),
           );
         },
       ),
@@ -93,7 +155,7 @@ class _AttendanceStatCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(

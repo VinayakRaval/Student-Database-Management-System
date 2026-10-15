@@ -24,7 +24,11 @@ class FeeStructure(TimeStamped):
     class SeatType(models.TextChoices):
         GM = "gm", "GM"
         SNQ = "snq", "SNQ"
-        NRI = "Lateral", "Lateral"
+        LATERAL = "lateral", "Lateral"
+        LATERAL_OLD = "Lateral", "Lateral (Legacy)"
+        MANAGEMENT = "management", "Management"
+        NRI = "nri", "NRI"
+        GENERAL_MERIT = "general_merit", "General Merit"
 
     class ApprovalStatus(models.TextChoices):
         PENDING = "pending", "Pending Principal Approval"
@@ -45,6 +49,7 @@ class FeeStructure(TimeStamped):
     rejection_remark = models.TextField(null=True, blank=True)
     
     class Meta:
+        db_table = 'fee_structure'
         unique_together = ("department", "academic_year", "semester", "seat_type", "title")
         ordering = ["department__name", "academic_year", "semester__id", "seat_type", "title"]
 
@@ -63,6 +68,7 @@ class FeeComponent(TimeStamped):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
+        db_table = 'fee_component'
         unique_together = ("fee_structure", "name")
         ordering = ["name"]
 
@@ -83,6 +89,7 @@ class StudentFee(TimeStamped):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
 
     class Meta:
+        db_table = 'student_fee'
         unique_together = ("student", "fee_structure")
         ordering = ["-created_at"]
 
@@ -128,6 +135,7 @@ class FeePayment(TimeStamped):
     )
 
     # Bank fields
+    bank_reference_no = models.CharField(max_length=64, blank=True, null=True)
     bank_statement_file = models.FileField(
         upload_to=payment_upload_path,
         blank=True,
@@ -165,6 +173,9 @@ class FeePayment(TimeStamped):
         return f"Payment {self.id} | {self.amount} | {self.get_mode_display()} | {status_flag}"
 
 # ---------- Receipts ----------
+
+    class Meta:
+        db_table = 'fee_payment'
 class FeeReceipt(TimeStamped):
     payment = models.OneToOneField(FeePayment, on_delete=models.PROTECT, related_name="receipt")
     receipt_no = models.CharField(max_length=40, unique=True)
@@ -180,3 +191,6 @@ class FeeReceipt(TimeStamped):
         return f"{prefix}-{ts}"
 
 
+
+    class Meta:
+        db_table = 'fee_receipt'

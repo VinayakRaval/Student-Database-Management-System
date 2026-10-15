@@ -12,8 +12,9 @@ from rest_framework import generics, permissions
 # ---------------- Department ---------------- #
 
 class DepartmentListCreateView(generics.ListCreateAPIView):
-    queryset = Department.objects.all()
+    queryset = Department.objects.all().order_by('id')
     serializer_class = DepartmentSerializer
+    pagination_class = None
 
     def get_permissions(self):
         if self.request.method == "GET":
@@ -29,8 +30,9 @@ class DepartmentDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ---------------- Semester ---------------- #
 
 class SemesterListCreateView(generics.ListCreateAPIView):
-    queryset = Semester.objects.all()
+    queryset = Semester.objects.all().order_by('sem_number')
     serializer_class = SemesterSerializer
+    pagination_class = None
 
     def get_permissions(self):
         if self.request.method == "GET":
@@ -50,8 +52,9 @@ class SemesterDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ---------------- Academic Year ---------------- #
 
 class AcademicYearListCreateView(generics.ListCreateAPIView):
-    queryset = AcademicYear.objects.all()
+    queryset = AcademicYear.objects.all().order_by('id')
     serializer_class = AcademicYearSerializer
+    pagination_class = None
 
     def get_permissions(self):
         if self.request.method == "GET":
@@ -71,10 +74,11 @@ class AcademicYearDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ---------------- Schema ---------------- #
 
 class SchemaListCreateView(generics.ListCreateAPIView):
-    queryset = Schema.objects.all()
+    queryset = Schema.objects.all().order_by('id')
     serializer_class = SchemaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["department"]
+    pagination_class = None
 
     def get_permissions(self):
         if self.request.method == "GET":

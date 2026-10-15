@@ -11,7 +11,7 @@ def generate_otp():
     return "{:06d}".format(random.randint(0, 999999))
 
 def get_user_by_identifier(identifier):
-    """Fetch user by email, phone, or user_id."""
+    """Fetch user by email, phone, user_id, or usn."""
     user = None
     if not identifier:
         return None
@@ -19,10 +19,15 @@ def get_user_by_identifier(identifier):
     if "@" in identifier:
         user = CustomUser.objects.filter(email__iexact=identifier).first()
     elif identifier.isdigit():
-        # phone numbers may include +, so a strict isdigit could be replaced by a phone normalizer
         user = CustomUser.objects.filter(phone__iexact=identifier).first()
+        if not user:
+            user = CustomUser.objects.filter(user_id__iexact=identifier).first()
+        if not user:
+            user = CustomUser.objects.filter(usn__iexact=identifier).first()
     else:
         user = CustomUser.objects.filter(user_id__iexact=identifier).first()
+        if not user:
+            user = CustomUser.objects.filter(usn__iexact=identifier).first()
     return user
 
 

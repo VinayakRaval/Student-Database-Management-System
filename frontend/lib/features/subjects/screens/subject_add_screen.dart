@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart' as p;
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/core/constants/api_constants.dart';
 import '../models/subject_model.dart';
 import '../providers/subject_provider.dart';
 
@@ -20,6 +23,14 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
   int? _selectedDepartment;
   int? _selectedSemester;
   int? _selectedSchema;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(subjectProvider.notifier).loadDropdowns();
+    });
+  }
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
@@ -99,11 +110,61 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(subjectProvider);
 
+    final auth = p.Provider.of<AuthProvider>(context);
+    final role = (auth.role ?? '').toUpperCase();
+    final isHod = role == AppRoles.hod;
+    final int? userDeptId = auth.userData?['department'] is int
+        ? auth.userData!['department'] as int
+        : int.tryParse(auth.userData?['department']?.toString() ?? '');
+    final String? userDeptName = auth.userData?['department_name']?.toString();
+
+    List<SubjectOption> availableDepts = state.departments;
+    if (isHod && userDeptId != null) {
+      final filtered = state.departments.where((d) => d.id == userDeptId).toList();
+      if (filtered.isNotEmpty) {
+        availableDepts = filtered;
+      } else {
+        availableDepts = [SubjectOption(id: userDeptId, name: userDeptName ?? "My Department")];
+      }
+    }
+
     ref.listen(subjectProvider, (previous, next) {
       if (next.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.red),
-        );
+        final err = next.errorMessage!;
+        if (err.toLowerCase().contains("already exists")) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                  SizedBox(width: 8),
+                  Text("Subject Already Exists", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              content: Text(
+                err,
+                style: const TextStyle(fontSize: 15),
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF13246E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("OK"),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err), backgroundColor: Colors.red),
+          );
+        }
       }
       if (next.isSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -112,6 +173,47 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
         context.pop();
       }
     });
+
+    // Auto-select department for HOD or first available
+    if (isHod && userDeptId != null && _selectedDepartment != userDeptId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedDepartment = userDeptId;
+          });
+        }
+      });
+    } else if (_selectedDepartment == null && availableDepts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedDepartment == null) {
+          setState(() {
+            _selectedDepartment = availableDepts.first.id;
+          });
+        }
+      });
+    }
+
+    // Auto-select semester if available and not selected
+    if (_selectedSemester == null && state.semesters.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedSemester == null) {
+          setState(() {
+            _selectedSemester = state.semesters.first.id;
+          });
+        }
+      });
+    }
+
+    // Auto-select schema if available and not selected
+    if (_selectedSchema == null && state.schemas.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedSchema == null) {
+          setState(() {
+            _selectedSchema = state.schemas.first.id;
+          });
+        }
+      });
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -146,8 +248,8 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
                     _buildDropdown(
                       label: "Department",
                       value: _selectedDepartment,
-                      items: state.departments,
-                      onChanged: (val) => setState(() => _selectedDepartment = val),
+                      items: availableDepts,
+                      onChanged: isHod ? null : (val) => setState(() => _selectedDepartment = val),
                       isLoading: state.isLoading,
                     ),
 
@@ -228,7 +330,7 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
     required String label,
     required int? value,
     required List<SubjectOption> items,
-    required Function(int?) onChanged,
+    required Function(int?)? onChanged,
     required bool isLoading,
   }) {
     return Padding(
