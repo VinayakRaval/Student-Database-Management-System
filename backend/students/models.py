@@ -52,7 +52,7 @@ class Student(models.Model):
     usn = models.CharField(max_length=20, unique=True, blank=True, null=True)
     admission_quota = models.CharField(max_length=100, blank=True, null=True)
     rank = EncryptedCharField(max_length=20, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active', blank=True, null=True)
     registration_status = models.CharField(max_length=20, choices=REGISTRATION_STATUS_CHOICES, default='pending')
 
     # Marks & Documents

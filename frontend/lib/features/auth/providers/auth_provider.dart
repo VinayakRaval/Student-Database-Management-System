@@ -67,6 +67,26 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> setAuthData(Map<String, dynamic> data) async {
+    if (data['access'] != null) {
+      await _storage.write('access', data['access']);
+    }
+    if (data['refresh'] != null) {
+      await _storage.write('refresh', data['refresh']);
+    }
+    if (data['role'] != null) {
+      await _storage.write('role', data['role']);
+      _role = data['role'];
+    }
+    if (data['user'] != null) {
+      await _storage.write('user_data', jsonEncode(data['user']));
+      _userData = data['user'];
+    }
+    _isLoggedIn = true;
+    _isLoading = false;
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await _storage.delete('access');
     await _storage.delete('refresh');
@@ -111,6 +131,37 @@ class AuthProvider extends ChangeNotifier {
       };
     } catch (e) {
       return {'success': false, 'message': 'Invalid OTP or Expired.'};
+    }
+  }
+
+  // Change Password for authenticated user
+  Future<Map<String, dynamic>> changePassword(
+    String oldPassword,
+    String newPassword,
+  ) async {
+    try {
+      final response = await _api.dio.post(
+        'userlogin/password/change/',
+        data: {
+          'old_password': oldPassword,
+          'new_password': newPassword,
+        },
+      );
+      return {
+        'success': true,
+        'message': response.data['message'] ?? 'Password changed successfully',
+      };
+    } catch (e) {
+      String msg = 'Failed to change password.';
+      try {
+        final dynamic errData = (e as dynamic).response?.data;
+        if (errData is Map && errData['error'] != null) {
+          msg = errData['error'].toString();
+        } else if (errData is Map && errData['detail'] != null) {
+          msg = errData['detail'].toString();
+        }
+      } catch (_) {}
+      return {'success': false, 'message': msg};
     }
   }
 }

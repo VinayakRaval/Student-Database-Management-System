@@ -67,7 +67,6 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
 
     _selectedDepartmentId = f.departmentId;
 
-    // Ensure departments are loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(facultyProvider.notifier).fetchDepartments();
     });
@@ -133,42 +132,40 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
     final facultyState = ref.watch(facultyProvider);
     final departments = facultyState.departments;
 
-    // Fallback if department not matched by id
     if (_selectedDepartmentId == null && departments.isNotEmpty) {
-      final match = departments.where((d) => d.name.toLowerCase() == widget.faculty.department.toLowerCase()).firstOrNull;
+      final match = departments
+          .where((d) => d.name.toLowerCase() == widget.faculty.department.toLowerCase())
+          .firstOrNull;
       if (match != null) {
         _selectedDepartmentId = match.id;
       }
     }
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 550, maxHeight: 720),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 760),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0E0E0),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
+                // Header (Image 4 style: Clean text and subtitle)
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF13246E).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.edit,
-                        color: Color(0xFF13246E),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,194 +173,176 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
                           const Text(
                             "Edit Faculty Details",
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF1F2937),
+                              color: Colors.black87,
                             ),
                           ),
+                          const SizedBox(height: 2),
                           Text(
-                            "ID: ${widget.faculty.facultyId}",
-                            style: const TextStyle(
+                            "Registration ID: ${widget.faculty.facultyId}",
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF13246E),
-                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(Icons.close, color: Colors.black54),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
 
-                // Form Fields (Scrollable)
-                Expanded(
+                // Form Content
+                Flexible(
                   child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        // Name
-                        TextFormField(
-                          controller: _nameCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Full Name *",
-                            prefixIcon: const Icon(Icons.person_outline, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildField(
+                            label: "Full Name *",
+                            controller: _nameCtrl,
+                            hint: "Faculty Name",
+                            validator: (val) => val == null || val.trim().isEmpty ? "Name is required" : null,
                           ),
-                          validator: (val) => val == null || val.trim().isEmpty ? "Name is required" : null,
-                        ),
-                        const SizedBox(height: 14),
 
-                        // Email & Phone
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _emailCtrl,
-                                decoration: InputDecoration(
-                                  labelText: "Email *",
-                                  prefixIcon: const Icon(Icons.email_outlined, size: 20),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildDropdownField<String>(
+                                  label: "Gender",
+                                  value: _selectedGender,
+                                  items: _genderOptions
+                                      .map((g) => DropdownMenuItem(
+                                            value: g,
+                                            child: Text(g[0].toUpperCase() + g.substring(1)),
+                                          ))
+                                      .toList(),
+                                  onChanged: (val) => setState(() => _selectedGender = val),
                                 ),
-                                validator: (val) => val == null || val.trim().isEmpty ? "Email is required" : null,
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _phoneCtrl,
-                                decoration: InputDecoration(
-                                  labelText: "Phone *",
-                                  prefixIcon: const Icon(Icons.phone_outlined, size: 20),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: _buildField(
+                                  label: "Qualification",
+                                  controller: _qualCtrl,
+                                  hint: "e.g. M.Tech, Ph.D",
                                 ),
-                                validator: (val) => val == null || val.trim().isEmpty ? "Phone is required" : null,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Role & Gender
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _selectedRole,
-                                decoration: InputDecoration(
-                                  labelText: "Role",
-                                  prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                items: _roleOptions.map((r) {
-                                  return DropdownMenuItem<String>(
-                                    value: r['value'],
-                                    child: Text(r['label']!),
-                                  );
-                                }).toList(),
-                                onChanged: (val) => setState(() => _selectedRole = val),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _selectedGender,
-                                decoration: InputDecoration(
-                                  labelText: "Gender",
-                                  prefixIcon: const Icon(Icons.transgender_outlined, size: 20),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                items: _genderOptions.map((g) {
-                                  return DropdownMenuItem<String>(
-                                    value: g,
-                                    child: Text(g[0].toUpperCase() + g.substring(1)),
-                                  );
-                                }).toList(),
-                                onChanged: (val) => setState(() => _selectedGender = val),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Department Dropdown
-                        DropdownButtonFormField<int>(
-                          initialValue: _selectedDepartmentId,
-                          decoration: InputDecoration(
-                            labelText: "Department",
-                            prefixIcon: const Icon(Icons.apartment_outlined, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ],
                           ),
-                          hint: const Text("Select Department"),
-                          items: departments.map((d) {
-                            return DropdownMenuItem<int>(
-                              value: d.id,
-                              child: Text(d.name),
-                            );
-                          }).toList(),
-                          onChanged: (val) => setState(() => _selectedDepartmentId = val),
-                        ),
-                        const SizedBox(height: 14),
 
-                        // Qualification
-                        TextFormField(
-                          controller: _qualCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Qualification",
-                            prefixIcon: const Icon(Icons.school_outlined, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildField(
+                                  label: "Email-ID *",
+                                  controller: _emailCtrl,
+                                  hint: "email@example.com",
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (val) => val == null || val.trim().isEmpty ? "Email is required" : null,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: _buildField(
+                                  label: "Phone *",
+                                  controller: _phoneCtrl,
+                                  hint: "Phone Number",
+                                  keyboardType: TextInputType.phone,
+                                  validator: (val) => val == null || val.trim().isEmpty ? "Phone is required" : null,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 14),
 
-                        // Address
-                        TextFormField(
-                          controller: _addressCtrl,
-                          maxLines: 2,
-                          decoration: InputDecoration(
-                            labelText: "Address",
-                            prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          _buildField(
+                            label: "Address",
+                            controller: _addressCtrl,
+                            hint: "Residential Address",
+                            maxLines: 2,
                           ),
-                        ),
-                      ],
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildDropdownField<int>(
+                                  label: "Department *",
+                                  value: _selectedDepartmentId,
+                                  hint: "Select Department",
+                                  items: departments
+                                      .map((d) => DropdownMenuItem(
+                                            value: d.id,
+                                            child: Text(d.name, overflow: TextOverflow.ellipsis),
+                                          ))
+                                      .toList(),
+                                  onChanged: (val) => setState(() => _selectedDepartmentId = val),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: _buildDropdownField<String>(
+                                  label: "Role / Designation *",
+                                  value: _selectedRole,
+                                  items: _roleOptions
+                                      .map((r) => DropdownMenuItem(
+                                            value: r['value'],
+                                            child: Text(r['label']!),
+                                          ))
+                                      .toList(),
+                                  onChanged: (val) => setState(() => _selectedRole = val),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
 
-                // Action Buttons
+                const SizedBox(height: 20),
+
+                // Action Buttons (Image 4 pill style)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        side: BorderSide(color: Colors.grey.shade500),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
                       onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                      child: const Text("Cancel"),
+                      child: const Text("Cancel", style: TextStyle(color: Colors.black87)),
                     ),
                     const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.check, size: 18),
-                      label: Text(_isSaving ? "Saving..." : "Save Changes"),
+                    ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF13246E),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 2,
                       ),
                       onPressed: _isSaving ? null : _handleSave,
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text(
+                              "Update Faculty Details",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                     ),
                   ],
                 ),
@@ -371,6 +350,95 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required String label,
+    required TextEditingController controller,
+    String? hint,
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: TextFormField(
+              controller: controller,
+              maxLines: maxLines,
+              keyboardType: keyboardType,
+              validator: validator,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdownField<T>({
+    required String label,
+    required T? value,
+    String? hint,
+    required List<DropdownMenuItem<T>> items,
+    required void Function(T?) onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButtonFormField<T>(
+                value: value,
+                items: items,
+                onChanged: onChanged,
+                isExpanded: true,
+                hint: hint != null ? Text(hint, style: TextStyle(fontSize: 13, color: Colors.grey.shade400)) : null,
+                decoration: const InputDecoration(border: InputBorder.none),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

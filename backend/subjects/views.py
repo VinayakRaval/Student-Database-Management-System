@@ -55,29 +55,41 @@ class GetSubjectsView(APIView):
         schema_id = request.query_params.get("schema", None)
         semester = request.query_params.get("semester", None)
         department_id = request.query_params.get("department_id", None)
+        include_all = (request.query_params.get("include_all", "") or request.query_params.get("all", "")).lower() in ["true", "1"]
+        cross_dept = (request.query_params.get("cross_department", "")).lower() in ["true", "1"]
 
         user_role = (getattr(request.user, "role", "") or "").upper()
-        if user_role == "HOD" and not department_id:
+        if user_role == "HOD" and not department_id and not (include_all or cross_dept):
             dept = _resolve_department_for_user(request.user)
             if dept:
                 department_id = dept.id
 
-        subjects = Subject.objects.all().select_related('department')
+        subjects = Subject.objects.all().select_related('department', 'semester')
 
-        if department_id:
+        if department_id and str(department_id).lower() != "all":
             subjects = subjects.filter(department_id=department_id)
         if schema_id:
             subjects = subjects.filter(schema_id=schema_id)
         if semester:
             subjects = subjects.filter(semester_id=semester)
 
+        assigned_subject_ids = set()
+        if user_role in ["PROFESSOR", "FACULTY"]:
+            from timetable.views import _resolve_faculty_for_user
+            fac = _resolve_faculty_for_user(request.user)
+            if fac:
+                assigned_subject_ids = set(SubjectAssignment.objects.filter(faculty=fac).values_list('subject_id', flat=True))
+
         result = [{
             "id": s.id,
             "code": s.subject_code,
             "name": s.subject_name,
             "semester": s.semester_id,
+            "semester_no": getattr(getattr(s, "semester", None), "sem_number", s.semester_id),
             "department_id": s.department_id,
-            "department_name": getattr(s.department, "name", "")
+            "department_name": getattr(s.department, "name", ""),
+            "is_elective": getattr(s, "is_elective", False),
+            "is_assigned_to_me": (s.id in assigned_subject_ids) if user_role in ["PROFESSOR", "FACULTY"] else True,
         } for s in subjects]
         return Response(result, status=status.HTTP_200_OK)
 

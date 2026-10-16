@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/features/notifications/widgets/notification_bell_widget.dart';
 
 class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -17,6 +18,7 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
 
     final user = auth.userData ?? {};
     final userId = user['user_id'] ?? "User";
+    final fullName = user['full_name'] ?? user['name'] ?? (auth.role == 'LIBRARY' ? 'Library Officer' : userId);
     final email = user['email'] ?? "No Email";
     final role = (auth.role ?? "Guest").replaceAll('_', ' ');
 
@@ -38,6 +40,8 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        NotificationBellWidget(iconColor: textColor),
+        const SizedBox(width: 8),
         Builder(
           builder: (ctx) => InkWell(
             onTap: () {
@@ -82,11 +86,21 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            userId,
+                            fullName,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                               color: isDark ? Colors.white : Colors.black87,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "ID: $userId",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
                             ),
                           ),
                           const SizedBox(height: 4),

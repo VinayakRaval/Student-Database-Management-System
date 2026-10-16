@@ -2,10 +2,25 @@ from rest_framework import serializers
 from .models import Department, Semester,  AcademicYear, Schema
 
 
+ALLOWED_DEPARTMENTS = [
+    "Computer Science and Engineering",
+    "Electronics and Communication Engineering",
+    "Civil Engineering",
+    "Mechanical Engineering",
+]
+
 class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
         fields = ["id", "name"]
+
+    def validate_name(self, value):
+        val_clean = value.strip()
+        if val_clean not in ALLOWED_DEPARTMENTS:
+            raise serializers.ValidationError(
+                f"Department must be one of: {', '.join(ALLOWED_DEPARTMENTS)}"
+            )
+        return val_clean
 
 
 class SemesterSerializer(serializers.ModelSerializer):

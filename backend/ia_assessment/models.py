@@ -30,7 +30,7 @@ class IATestSetup(models.Model):
 
     class Meta:
         db_table = 'ia_test_setup'
-        unique_together = ("subject", "faculty", "ia_type", "ia_name")
+        unique_together = ("subject", "ia_type", "ia_name")
 
     def __str__(self):
         return f"{self.subject.subject_code} - {self.ia_type} ({self.ia_name})"

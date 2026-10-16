@@ -105,14 +105,18 @@ class AssignSubjectController extends StateNotifier<AssignSubjectState> {
     }
   }
 
-  // 2. Fetch Subjects based on Department & Semester
-  Future<void> fetchSubjects(int deptId, int semId) async {
+  // 2. Fetch Subjects based on Department & Semester (supports cross-department)
+  Future<void> fetchSubjects(dynamic deptId, int semId) async {
     state = state.copyWith(isLoading: true); // Show loading while fetching subjects
     try {
-      // Endpoint from your views.py: GetSubjectsView with filtering
+      final queryParams = <String, dynamic>{'semester': semId};
+      if (deptId != null && deptId.toString().isNotEmpty) {
+        queryParams['department_id'] = deptId;
+      }
+      // Endpoint from views.py: GetSubjectsView with filtering
       final response = await _dio.get(
         '/subjects/getSubjects/', 
-        queryParameters: {'department_id': deptId, 'semester': semId}
+        queryParameters: queryParams,
       );
       
       List<dynamic> data;

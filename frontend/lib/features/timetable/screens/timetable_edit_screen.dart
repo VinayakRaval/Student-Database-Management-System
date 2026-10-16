@@ -154,20 +154,23 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
           if (start.startsWith("11:30")) breakWidget = _buildBreakDivider("BREAK (11:20)");
           if (start.startsWith("14:00")) breakWidget = _buildBreakDivider("LUNCH (01:20)");
 
-          return Column(
-            children: [
-              if (breakWidget != null) breakWidget,
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: const Icon(Icons.access_time),
-                  title: Text("${slot['start_time']} - ${slot['end_time']}"),
-                  subtitle: Text("${assignment.subjectName} (${assignment.facultyName})"),
-                  trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _slots.remove(slot))),
-                ),
-              ),
-            ],
-          );
+                  final hasDept = assignment.subjectDepartment != null && assignment.subjectDepartment!.trim().isNotEmpty;
+                  final deptTag = hasDept ? " [${assignment.subjectDepartment}]" : "";
+                  final codeTag = (assignment.subjectCode != null && assignment.subjectCode!.trim().isNotEmpty) ? " (${assignment.subjectCode})" : "";
+                  return Column(
+                    children: [
+                      ?breakWidget,
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const Icon(Icons.access_time),
+                          title: Text("${slot['start_time']} - ${slot['end_time']}"),
+                          subtitle: Text("${assignment.subjectName}$codeTag$deptTag (${assignment.facultyName})"),
+                          trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _slots.remove(slot))),
+                        ),
+                      ),
+                    ],
+                  );
         }),
       ],
     );
@@ -201,7 +204,11 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: "Subject"), isExpanded: true,
                 value: (assignments.any((a) => a.id == selectedAssignment)) ? selectedAssignment : null,
-                items: assignments.map((a) => DropdownMenuItem(value: a.id, child: Text("${a.subjectName}\n(${a.facultyName})"))).toList(),
+                items: assignments.map((a) {
+                  final hasDept = a.subjectDepartment != null && a.subjectDepartment!.trim().isNotEmpty;
+                  final deptTag = hasDept ? " [${a.subjectDepartment}]" : "";
+                  return DropdownMenuItem(value: a.id, child: Text("${a.subjectName}$deptTag\n(${a.facultyName})"));
+                }).toList(),
                 onChanged: (val) => setState(() => selectedAssignment = val),
               ),
               const SizedBox(height: 15),

@@ -23,12 +23,65 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
   int? _selectedDepartment;
   int? _selectedSemester;
   int? _selectedSchema;
+  bool _isElective = false;
+
+  // Elective Cross-Department Selection
+  int? _selectedOfferingDepartment;
+  int? _selectedOfferingSubjectId;
+  List<Map<String, dynamic>> _offeringSubjects = [];
+  bool _isLoadingOfferingSubjects = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(subjectProvider.notifier).loadDropdowns();
+    });
+  }
+
+  Future<void> _loadOfferingSubjects() async {
+    if (_selectedOfferingDepartment == null) return;
+    setState(() {
+      _isLoadingOfferingSubjects = true;
+      _offeringSubjects = [];
+      _selectedOfferingSubjectId = null;
+    });
+
+    try {
+      final subjects = await ref
+          .read(subjectProvider.notifier)
+          .fetchOfferingSubjects(
+            _selectedOfferingDepartment!,
+            semester: _selectedSemester,
+          );
+      if (mounted) {
+        setState(() {
+          _offeringSubjects = subjects;
+          _isLoadingOfferingSubjects = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingOfferingSubjects = false);
+      }
+    }
+  }
+
+  void _onOfferingSubjectSelected(int? subjectId) {
+    setState(() {
+      _selectedOfferingSubjectId = subjectId;
+      if (subjectId != null) {
+        final sub = _offeringSubjects.firstWhere(
+          (s) => s['id'] == subjectId,
+          orElse: () => <String, dynamic>{},
+        );
+        if (sub.isNotEmpty) {
+          _nameController.text =
+              (sub['name'] ?? sub['subject_name'] ?? '').toString();
+          _codeController.text =
+              (sub['code'] ?? sub['subject_code'] ?? '').toString();
+        }
+      }
     });
   }
 
@@ -47,6 +100,7 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
         departmentId: _selectedDepartment!,
         semesterId: _selectedSemester!,
         schemaId: _selectedSchema!,
+        isElective: _isElective,
       );
 
       ref.read(subjectProvider.notifier).addSubject(subjectData);
@@ -257,17 +311,30 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
                       label: "Semester",
                       value: _selectedSemester,
                       items: state.semesters,
-                      onChanged: (val) => setState(() => _selectedSemester = val),
+                      onChanged: (val) {
+                        setState(() => _selectedSemester = val);
+                        if (_isElective && _selectedOfferingDepartment != null) {
+                          _loadOfferingSubjects();
+                        }
+                      },
                       isLoading: state.isLoading,
                     ),
 
                     // Modified Schema Dropdown with Add Button
                     _buildSchemaDropdownWithAdd(state),
 
+                    _buildElectiveCheckbox(),
+
+                    if (_isElective) ...[
+                      _buildOfferingDepartmentDropdown(state.departments),
+                      if (_selectedOfferingDepartment != null)
+                        _buildOfferingSubjectDropdown(),
+                    ],
+
                     _buildField(label: "Subject Name", controller: _nameController, hint: "e.g. Data Structures"),
                     _buildField(label: "Subject Code", controller: _codeController, hint: "e.g. CS101"),
 
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 10),
 
                     Align(
                       alignment: Alignment.centerRight,
@@ -297,6 +364,125 @@ class _SubjectAddScreenState extends ConsumerState<SubjectAddScreen> {
   }
 
   // --- WIDGETS ---
+
+  Widget _buildElectiveCheckbox() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: CheckboxListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          title: const Text(
+            "Elective Subject (Optional)",
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black87),
+          ),
+          subtitle: const Text(
+            "Check if this subject is an elective or open-elective offering",
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          value: _isElective,
+          activeColor: const Color(0xFF13246E),
+          onChanged: (val) {
+            setState(() {
+              _isElective = val ?? false;
+              if (!_isElective) {
+                _selectedOfferingDepartment = null;
+                _selectedOfferingSubjectId = null;
+                _offeringSubjects = [];
+              }
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOfferingDepartmentDropdown(List<SubjectOption> departments) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Offering Department",
+            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButtonFormField<int>(
+                value: _selectedOfferingDepartment,
+                isExpanded: true,
+                hint: const Text("Select Offering Department"),
+                items: departments
+                    .map((e) => DropdownMenuItem(value: e.id, child: Text(e.name)))
+                    .toList(),
+                onChanged: (val) {
+                  setState(() => _selectedOfferingDepartment = val);
+                  _loadOfferingSubjects();
+                },
+                decoration: const InputDecoration(border: InputBorder.none),
+                validator: (val) => _isElective && val == null ? "Required for elective" : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfferingSubjectDropdown() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Department Subject",
+            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButtonFormField<int>(
+                value: _selectedOfferingSubjectId,
+                isExpanded: true,
+                hint: Text(_isLoadingOfferingSubjects
+                    ? "Loading subjects..."
+                    : (_offeringSubjects.isEmpty
+                        ? "No subjects found for this department & semester"
+                        : "Select Subject")),
+                items: _offeringSubjects.map((sub) {
+                  final id = sub['id'] as int;
+                  final name = (sub['name'] ?? sub['subject_name'] ?? '').toString();
+                  final code = (sub['code'] ?? sub['subject_code'] ?? '').toString();
+                  return DropdownMenuItem<int>(
+                    value: id,
+                    child: Text("$code - $name", overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+                onChanged: _onOfferingSubjectSelected,
+                decoration: const InputDecoration(border: InputBorder.none),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildField({required String label, required TextEditingController controller, String? hint}) {
     return Padding(

@@ -285,7 +285,11 @@ class TimetableController extends StateNotifier<TimetableState> {
     }
   }
 
-  Future<Map<String, dynamic>> fetchScheduleDetails({int? semester, String? search}) async {
+  Future<Map<String, dynamic>> fetchScheduleDetails({
+    int? semester,
+    String? search,
+    bool personal = false,
+  }) async {
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -295,6 +299,7 @@ class TimetableController extends StateNotifier<TimetableState> {
       final queryParams = <String, dynamic>{};
       if (semester != null) queryParams['semester'] = semester;
       if (search != null && search.trim().isNotEmpty) queryParams['search'] = search.trim();
+      if (personal) queryParams['personal'] = 'true';
 
       final response = await _dio.get(
         '/timetable/timetables/my_schedule/',

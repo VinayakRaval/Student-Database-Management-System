@@ -8,6 +8,7 @@ from .views import (
     PrincipalApprovalView,
     StudentDetailView,
     promote_student,  # <-- import the promote_semester view
+    resend_student_invitation,
 )
 
 urlpatterns = [
@@ -30,10 +31,12 @@ urlpatterns = [
     # Step 3: Principal approves or rejects registration
     path('<int:id>/approve/', PrincipalApprovalView.as_view(), name='student-approve'),
 
+    # Resend password setup invitation (HOD/Principal/Admin)
+    path('<int:id>/resend-invitation/', resend_student_invitation, name='student-resend-invitation'),
+
     # Student views their own details (after approval/login)
     path('me/', StudentDetailView.as_view(), name='student-self-detail'),
 
     # Promote semester for students of a department (only HOD)
     path('<int:id>/promote/', promote_student, name='student-promote'),
-
 ]

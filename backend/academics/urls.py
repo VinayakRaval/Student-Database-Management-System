@@ -5,6 +5,7 @@ from .views import (
     AcademicYearListCreateView, AcademicYearDetailView,
     SchemaListCreateView, SchemaDetailView
 )
+from .reports import DepartmentReportsView
 
 urlpatterns = [
     # Department
@@ -23,4 +24,7 @@ urlpatterns = [
     # Schema
     path("schemas/", SchemaListCreateView.as_view(), name="schema_list_create"),
     path("schemas/<int:pk>/", SchemaDetailView.as_view(), name="schema_detail"),
+
+    # Department Reports
+    path("reports/department/", DepartmentReportsView.as_view(), name="department_reports"),
 ]

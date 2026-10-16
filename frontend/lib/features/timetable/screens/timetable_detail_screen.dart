@@ -408,9 +408,12 @@ class TimetableDetailScreen extends ConsumerWidget {
     for (var s in slots) {
       final code = s.subjectCode ?? "Unknown";
       if (!summary.containsKey(code)) {
+        final deptStr = (s.subjectDepartment != null && s.subjectDepartment!.trim().isNotEmpty)
+            ? " [${s.subjectDepartment}]"
+            : "";
         summary[code] = {
           "code": code,
-          "name": s.subjectName ?? "Unknown Subject",
+          "name": "${s.subjectName ?? 'Unknown Subject'}$deptStr",
           "faculty": s.facultyName ?? "N/A",
         };
       }

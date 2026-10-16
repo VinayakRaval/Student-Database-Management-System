@@ -7,4 +7,7 @@ urlpatterns = [
     path("faculty/active-students/", views.FacultyActiveStudentsView.as_view()),
     path("faculty/ia-marks/", views.FacultyIAMarkListView.as_view()),
     path("student/ia-marks/", views.StudentIAMarkListView.as_view()),
+    path("hod/performance-summary/", views.HODAcademicPerformanceView.as_view()),
+    path("hod/test-students/", views.HODTestStudentsView.as_view()),
 ]
+

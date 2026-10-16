@@ -37,6 +37,12 @@ class ApiClient {
             print("🚨 NO TOKEN FOUND in Storage!");
           }
 
+          if (options.data is FormData) {
+            options.headers.remove('Content-Type');
+            options.headers.remove('content-type');
+            options.contentType = null;
+          }
+
           return handler.next(options);
         },
         onError: (DioException e, handler) {

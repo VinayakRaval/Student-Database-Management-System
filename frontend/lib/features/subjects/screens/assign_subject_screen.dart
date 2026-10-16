@@ -22,8 +22,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
   int? _selectedSem;
   int? _selectedYear;
 
-  // List of Rows (Subject Code, Faculty ID)
-  // Each item is a map: {'subject': 'CS101', 'faculty': 5}
+  // List of Rows: {'subject': String?, 'faculty': int?}
   List<Map<String, dynamic>> _rows = [];
 
   @override
@@ -34,18 +33,23 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
     });
   }
 
-  // Helper to fetch subjects when Dept/Sem changes
+  // Helper to fetch cohort subjects when Dept/Sem changes
   void _checkAndFetchSubjects() {
     if (_selectedDept != null && _selectedSem != null) {
-      // Clear existing rows if context changes to prevent mismatches
-      setState(() => _rows = []); 
-      ref.read(assignSubjectProvider.notifier).fetchSubjects(_selectedDept!, _selectedSem!);
+      setState(() => _rows = []);
+      ref.read(assignSubjectProvider.notifier).fetchSubjects(
+            _selectedDept!,
+            _selectedSem!,
+          );
     }
   }
 
   void _addRow() {
     setState(() {
-      _rows.add({'subject': null, 'faculty': null});
+      _rows.add({
+        'subject': null,
+        'faculty': null,
+      });
     });
   }
 
@@ -58,26 +62,33 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
     if (_rows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Add at least one assignment row")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Add at least one assignment row")),
+      );
       return;
     }
 
     // Check if all rows are filled
-    for (var row in _rows) {
+    for (int i = 0; i < _rows.length; i++) {
+      final row = _rows[i];
       if (row['subject'] == null || row['faculty'] == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all rows")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Please select subject and faculty for row #${i + 1}")),
+        );
         return;
       }
     }
 
     final request = SubjectAssignmentRequest(
       departmentId: _selectedDept!,
-      assignments: _rows.map((r) => AssignmentItem(
-        subjectCode: r['subject'],
-        facultyId: r['faculty'],
-        semesterId: _selectedSem!,
-        academicYearId: _selectedYear!,
-      )).toList(),
+      assignments: _rows.map((r) {
+        return AssignmentItem(
+          subjectCode: r['subject'],
+          facultyId: r['faculty'],
+          semesterId: _selectedSem!,
+          academicYearId: _selectedYear!,
+        );
+      }).toList(),
     );
 
     ref.read(assignSubjectProvider.notifier).submitAssignment(request);
@@ -95,7 +106,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
         : int.tryParse(auth.userData?['department']?.toString() ?? '');
     final String? userDeptName = auth.userData?['department_name']?.toString();
 
-    // For HOD: Filter departments to ONLY show their assigned department
+    // For HOD: Filter departments to ONLY show their assigned department for cohort
     List<AssignOption> availableDepts = state.departments;
     if (isHod && userDeptId != null) {
       final filtered = state.departments.where((d) => d.id == userDeptId).toList();
@@ -133,7 +144,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
       });
     } else if (_selectedDept == null && availableDepts.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _selectedDept == null) {
+        if (mounted) {
           setState(() {
             _selectedDept = availableDepts.first.id;
           });
@@ -145,10 +156,9 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
     // Auto-select Semester
     if (_selectedSem == null && state.semesters.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _selectedSem == null) {
-          final sem3 = state.semesters.firstWhere((s) => s.id == 3, orElse: () => state.semesters.first);
+        if (mounted) {
           setState(() {
-            _selectedSem = sem3.id;
+            _selectedSem = state.semesters.first.id;
           });
           _checkAndFetchSubjects();
         }
@@ -158,7 +168,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
     // Auto-select Academic Year
     if (_selectedYear == null && state.academicYears.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _selectedYear == null) {
+        if (mounted) {
           setState(() {
             _selectedYear = state.academicYears.first.id;
           });
@@ -166,7 +176,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
       });
     }
 
-    // Deduplicate available subjects by subject code so DropdownMenuItem never has duplicate values
+    // Deduplicate available subjects by subject code
     final uniqueSubjectMap = <String, AssignOption>{};
     for (final s in state.availableSubjects) {
       if (s.code != null && s.code!.isNotEmpty && !uniqueSubjectMap.containsKey(s.code)) {
@@ -175,7 +185,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
     }
     final subjectList = uniqueSubjectMap.values.toList();
 
-    // Ensure at least one row exists when subjects are loaded
+    // Auto-add first row if empty and subjects available
     if (subjectList.isNotEmpty && _rows.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _rows.isEmpty && subjectList.isNotEmpty) {
@@ -204,16 +214,26 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- 1. GLOBAL SETTINGS ---
+              // --- 1. GLOBAL CONFIGURATION CARD ---
               _buildSectionTitle("Configuration"),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
                 child: Column(
                   children: [
                     _buildDropdown(
-                      label: "Department",
+                      label: isHod ? "Student Cohort Department" : "Department",
                       value: _selectedDept,
                       items: availableDepts,
                       onChanged: isHod
@@ -224,21 +244,29 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                             },
                     ),
                     const SizedBox(height: 15),
-                    _buildDropdown(
-                      label: "Semester",
-                      value: _selectedSem,
-                      items: state.semesters,
-                      onChanged: (val) {
-                        setState(() => _selectedSem = val);
-                        _checkAndFetchSubjects();
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    _buildDropdown(
-                      label: "Academic Year",
-                      value: _selectedYear,
-                      items: state.academicYears,
-                      onChanged: (val) => setState(() => _selectedYear = val),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDropdown(
+                            label: "Semester",
+                            value: _selectedSem,
+                            items: state.semesters,
+                            onChanged: (val) {
+                              setState(() => _selectedSem = val);
+                              _checkAndFetchSubjects();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDropdown(
+                            label: "Academic Year",
+                            value: _selectedYear,
+                            items: state.academicYears,
+                            onChanged: (val) => setState(() => _selectedYear = val),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -246,96 +274,187 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
 
               const SizedBox(height: 30),
 
-              // --- 2. ASSIGNMENT ROWS ---
+              // --- 2. ASSIGNMENT ROWS & ELECTIVE SELECTION ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildSectionTitle("Mappings"),
-                  TextButton.icon(
-                    icon: const Icon(Icons.add_circle, color: Color(0xFF13246E)),
-                    label: const Text("Add Row", style: TextStyle(color: Color(0xFF13246E), fontWeight: FontWeight.bold)),
-                    onPressed: (subjectList.isNotEmpty && _selectedYear != null) 
-                      ? _addRow 
-                      : null,
+                  _buildSectionTitle("Subject Mappings"),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text("Add Row"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF13246E),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: (_selectedDept != null && _selectedSem != null)
+                        ? _addRow
+                        : null,
                   ),
                 ],
               ),
-              
-              if (state.isLoading && subjectList.isEmpty && _selectedDept != null)
-                const Padding(padding: EdgeInsets.all(20.0), child: Center(child: CircularProgressIndicator())),
+              const SizedBox(height: 12),
 
-              if (subjectList.isEmpty && _selectedDept != null && !state.isLoading)
+              if (state.isLoading && subjectList.isEmpty && _selectedDept != null)
                 const Padding(
-                  padding: EdgeInsets.all(20.0), 
-                  child: Center(child: Text("No subjects found for this Department/Semester", style: TextStyle(color: Colors.grey)))
+                  padding: EdgeInsets.all(20.0),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+
+              if (_rows.isEmpty && !state.isLoading)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.assignment_outlined, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      const Text(
+                        "No subjects mapped yet",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Click 'Add Row' above to map subjects to faculty.",
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
 
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _rows.length,
-                separatorBuilder: (c, i) => const SizedBox(height: 10),
+                separatorBuilder: (c, i) => const SizedBox(height: 14),
                 itemBuilder: (context, index) {
-                  final currentSubject = _rows[index]['subject'];
+                  final row = _rows[index];
+                  final currentSubject = row['subject'];
                   final safeSubjectValue = subjectList.any((s) => s.code == currentSubject) ? currentSubject : null;
 
-                  final currentFaculty = _rows[index]['faculty'];
+                  final currentFaculty = row['faculty'];
                   final safeFacultyValue = state.faculties.any((f) => f.id == currentFaculty) ? currentFaculty : null;
 
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                    child: Row(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Subject Dropdown
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              hint: const Text("Select Subject"),
-                              value: safeSubjectValue,
-                              isExpanded: true,
-                              items: subjectList.map((s) {
-                                return DropdownMenuItem<String>(
-                                  value: s.code,
-                                  child: Text("${s.code} - ${s.name}", overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _rows[index]['subject'] = val),
+                        // Row Header
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF13246E).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                "Subject Mapping #${index + 1}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: Color(0xFF13246E),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        const VerticalDivider(width: 30),
-                        // Faculty Dropdown
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              hint: const Text("Select Faculty"),
-                              value: safeFacultyValue,
-                              isExpanded: true,
-                              items: state.faculties.map((f) {
-                                return DropdownMenuItem<int>(
-                                  value: f.id,
-                                  child: Text(f.name, overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _rows[index]['faculty'] = val),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                              tooltip: "Remove Mapping",
+                              onPressed: () => _removeRow(index),
                             ),
-                          ),
+                          ],
                         ),
-                        // Remove Button
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.red),
-                          onPressed: () => _removeRow(index),
-                        )
+                        const SizedBox(height: 12),
+
+                        // Subject & Faculty Row
+                        Row(
+                          children: [
+                            // Subject Dropdown
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                decoration: InputDecoration(
+                                  labelText: "Select Subject *",
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                value: safeSubjectValue,
+                                isExpanded: true,
+                                hint: Text(
+                                  subjectList.isEmpty ? "No subjects available" : "Select Subject",
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                items: subjectList.map((s) {
+                                  final label = s.isElective
+                                      ? "${s.code} - ${s.name} (${s.departmentName ?? 'Elective'})"
+                                      : "${s.code} - ${s.name}";
+                                  return DropdownMenuItem<String>(
+                                    value: s.code,
+                                    child: Text(
+                                      label,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (val) => setState(() => _rows[index]['subject'] = val),
+                                validator: (val) => val == null ? "Subject is required" : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Faculty Dropdown
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<int>(
+                                decoration: InputDecoration(
+                                  labelText: "Assigned Faculty *",
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                value: safeFacultyValue,
+                                isExpanded: true,
+                                hint: const Text("Select Faculty", style: TextStyle(fontSize: 13)),
+                                items: state.faculties.map((f) {
+                                  return DropdownMenuItem<int>(
+                                    value: f.id,
+                                    child: Text(f.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                                  );
+                                }).toList(),
+                                onChanged: (val) => setState(() => _rows[index]['faculty'] = val),
+                                validator: (val) => val == null ? "Faculty is required" : null,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   );
                 },
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
 
               // --- 3. SUBMIT BUTTON ---
               SizedBox(
@@ -349,7 +468,7 @@ class _AssignSubjectScreenState extends ConsumerState<AssignSubjectScreen> {
                   ),
                   child: state.isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("SUBMIT ASSIGNMENTS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      : const Text("SUBMIT ASSIGNMENTS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               ),
             ],

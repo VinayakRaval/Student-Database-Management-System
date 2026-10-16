@@ -67,7 +67,12 @@ class SubjectController extends StateNotifier<SubjectState> {
       var schemas = getList(results[2].data).map((e) => SubjectOption.fromMap(e)).toList();
 
       if (depts.isEmpty) {
-        depts = [SubjectOption(id: 2, name: "Computer Science and Engineering")];
+        depts = [
+          SubjectOption(id: 2, name: "Computer Science and Engineering"),
+          SubjectOption(id: 3, name: "Electronics and Communication Engineering"),
+          SubjectOption(id: 5, name: "Mechanical Engineering"),
+          SubjectOption(id: 6, name: "Civil Engineering"),
+        ];
       }
       if (sems.isEmpty) {
         sems = List.generate(8, (i) => SubjectOption(id: i + 1, name: "Semester ${i + 1}"));
@@ -86,7 +91,12 @@ class SubjectController extends StateNotifier<SubjectState> {
       state = state.copyWith(
         isLoading: false,
         errorMessage: "Failed to load options: $e",
-        departments: [SubjectOption(id: 2, name: "Computer Science and Engineering")],
+        departments: [
+          SubjectOption(id: 2, name: "Computer Science and Engineering"),
+          SubjectOption(id: 3, name: "Electronics and Communication Engineering"),
+          SubjectOption(id: 5, name: "Mechanical Engineering"),
+          SubjectOption(id: 6, name: "Civil Engineering"),
+        ],
         semesters: List.generate(8, (i) => SubjectOption(id: i + 1, name: "Semester ${i + 1}")),
         schemas: [SubjectOption(id: 1, name: "2022 Scheme - CSE")],
       );
@@ -141,6 +151,25 @@ class SubjectController extends StateNotifier<SubjectState> {
     } catch (e) {
       state = state.copyWith(errorMessage: "Failed to add schema: $e");
       return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchOfferingSubjects(int departmentId, {int? semester}) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'department_id': departmentId,
+        'cross_department': 'true',
+      };
+      if (semester != null) {
+        queryParams['semester'] = semester;
+      }
+      final response = await _dio.get('/subjects/getSubjects/', queryParameters: queryParams);
+      if (response.data is List) {
+        return List<Map<String, dynamic>>.from(response.data);
+      }
+      return [];
+    } catch (e) {
+      return [];
     }
   }
 }

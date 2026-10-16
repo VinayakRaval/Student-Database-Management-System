@@ -23,11 +23,29 @@ class ExternalResult(models.Model):
         related_name='external_results'
     )
 
+    STATUS_CHOICES = [
+        ('SUBMITTED', 'Submitted for Review'),
+        ('VERIFIED', 'Verified & Approved'),
+        ('CORRECTION_REQUESTED', 'Correction Required'),
+    ]
+
     exam_type = models.CharField(max_length=20, choices=EXAM_TYPE_CHOICES)
-
     pdf_file = models.FileField(upload_to='documents/external_results/', null=True, blank=True)
-
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='SUBMITTED')
+    sgpa = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    credits_cleared = models.IntegerField(default=20)
+    backlogs_count = models.IntegerField(default=0)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='verified_results'
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    remarks = models.TextField(blank=True, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ('student', 'semester', 'exam_type')

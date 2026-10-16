@@ -5,11 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 
-from .models import AttendanceSession, AttendanceRecord
+from .models import AttendanceSession, AttendanceRecord, AttendanceCorrectionRequest
 from .serializers import AttendanceSessionCreateSerializer, AttendanceSessionSerializer
 from students.models import Student
 from timetable.models import TimeTableSlot
-from subjects.models import Subject
+from subjects.models import Subject, SubjectAssignment
+from faculty.models import Faculty
+from django.utils import timezone
 
 # ==========================================
 # ==========================================
@@ -359,3 +361,281 @@ class StudentAttendanceView(generics.GenericAPIView):
             "attendance_percentage": attendance_percentage,
             "sessions": session_data
         })
+
+
+# ==========================================
+# 3. HOD Attendance Monitoring View
+# ==========================================
+class AttendanceMonitoringSummaryView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        from timetable.views import _resolve_department_for_user
+        user_role = (getattr(request.user, "role", "") or "").upper()
+        if user_role == "FACULTY":
+            user_role = "PROFESSOR"
+
+        dept = None
+        if user_role == "HOD":
+            dept = _resolve_department_for_user(request.user)
+            if not dept:
+                return Response({"error": "No department associated with HOD user."}, status=status.HTTP_404_NOT_FOUND)
+        elif user_role in ["PRINCIPAL", "SYSTEM"] or request.user.is_superuser:
+            dept_id = request.query_params.get("department_id")
+            if dept_id:
+                from academics.models import Department
+                dept = Department.objects.filter(id=dept_id).first()
+
+        # 1. Overview KPIs
+        students_qs = Student.objects.filter(status__iexact="active")
+        faculty_qs = Faculty.objects.filter(status__iexact="active")
+        subjects_qs = Subject.objects.all()
+        sessions_qs = AttendanceSession.objects.all()
+        records_qs = AttendanceRecord.objects.all()
+
+        if dept:
+            students_qs = students_qs.filter(department=dept)
+            faculty_qs = faculty_qs.filter(department=dept)
+            subjects_qs = subjects_qs.filter(
+                Q(department=dept) |
+                Q(subjectassignment__department=dept)
+            ).distinct()
+            sessions_qs = sessions_qs.filter(
+                Q(subject__department=dept) |
+                Q(faculty__department=dept)
+            ).distinct()
+            records_qs = records_qs.filter(
+                Q(session__subject__department=dept) |
+                Q(student__department=dept)
+            ).distinct()
+
+        total_students = students_qs.count()
+        total_faculty = faculty_qs.count()
+        total_records = records_qs.count()
+        present_records = records_qs.filter(status="Present").count()
+        avg_dept_attendance = round((present_records / total_records * 100), 1) if total_records > 0 else 0.0
+
+        # 2. Subject & Semester-wise Attendance
+        subject_stats = []
+        for sub in subjects_qs:
+            sub_records = records_qs.filter(session__subject=sub)
+            sub_total = sub_records.count()
+            sub_present = sub_records.filter(status="Present").count()
+            sub_sessions = sessions_qs.filter(subject=sub).count()
+
+            # Faculty assigned
+            assignment = SubjectAssignment.objects.filter(subject=sub).first()
+            has_faculty = assignment and assignment.faculty
+            fac_name = assignment.faculty.name if has_faculty else "Unassigned"
+
+            if sub_sessions == 0:
+                sub_pct = None
+                if not has_faculty:
+                    st_code = "UNASSIGNED"
+                    st_label = "Faculty unassigned"
+                else:
+                    st_code = "NO_SESSIONS"
+                    st_label = "No sessions recorded"
+            else:
+                sub_pct = round((sub_present / sub_total * 100), 1) if sub_total > 0 else 0.0
+                st_code = "HEALTHY" if sub_pct >= 75.0 else "CRITICAL"
+                st_label = "Healthy" if sub_pct >= 75.0 else "Critical (<75%)"
+
+            subject_stats.append({
+                "subject_id": sub.id,
+                "subject_code": sub.subject_code,
+                "subject_name": sub.subject_name,
+                "semester": sub.semester.sem_number if sub.semester else "N/A",
+                "department": sub.department.name if sub.department else "N/A",
+                "faculty_name": fac_name,
+                "total_sessions": sub_sessions,
+                "attendance_percentage": sub_pct,
+                "status": st_code,
+                "status_label": st_label,
+                "is_elective": sub.is_elective,
+            })
+
+        # 3. Professor Submission Status (Recent sessions / timetable slots)
+        from datetime import date
+        today = date.today()
+        recent_sessions = sessions_qs.select_related('subject', 'faculty').order_by('-date', '-created_at')[:20]
+        submissions = [
+            {
+                "session_id": s.id,
+                "subject_code": s.subject.subject_code,
+                "subject_name": s.subject.subject_name,
+                "faculty_name": s.faculty.name if s.faculty else "N/A",
+                "date": s.date.strftime("%Y-%m-%d"),
+                "session_count": s.session_count,
+                "records_count": s.records.count(),
+                "status": "SUBMITTED"
+            }
+            for s in recent_sessions
+        ]
+
+        # 4. Students Below Threshold (<75%)
+        low_attendance_students = []
+        for st in students_qs:
+            st_records = records_qs.filter(student=st)
+            st_total = st_records.count()
+            if st_total > 0:
+                st_present = st_records.filter(status="Present").count()
+                pct = round((st_present / st_total * 100), 1)
+                if pct < 75.0:
+                    low_attendance_students.append({
+                        "student_id": st.id,
+                        "usn": st.usn,
+                        "name": st.name,
+                        "semester": st.semester.sem_number if st.semester else "N/A",
+                        "department": st.department.name if st.department else "N/A",
+                        "total_classes": st_total,
+                        "attended_classes": st_present,
+                        "percentage": pct,
+                        "phone": getattr(st, 'mobile_number', getattr(st, 'phone', 'N/A'))
+                    })
+        # Sort lowest first
+        low_attendance_students.sort(key=lambda x: x["percentage"])
+
+        # 5. Review Correction Requests
+        cr_qs = AttendanceCorrectionRequest.objects.all()
+        if dept:
+            cr_qs = cr_qs.filter(
+                Q(student__department=dept) |
+                Q(faculty__department=dept)
+            )
+        correction_requests = [
+            {
+                "id": cr.id,
+                "student_usn": cr.student.usn,
+                "student_name": cr.student.name,
+                "faculty_name": cr.faculty.name if cr.faculty else "N/A",
+                "requested_status": cr.requested_status,
+                "reason": cr.reason,
+                "remarks": cr.remarks,
+                "status": cr.status,
+                "created_at": cr.created_at.strftime("%Y-%m-%d %H:%M"),
+                "reviewed_at": cr.reviewed_at.strftime("%Y-%m-%d %H:%M") if cr.reviewed_at else None,
+            }
+            for cr in cr_qs[:30]
+        ]
+
+        unassigned_count = sum(1 for s in subject_stats if s["status"] == "UNASSIGNED")
+
+        return Response({
+            "department_info": {
+                "id": dept.id if dept else 0,
+                "name": dept.name if dept else "All Departments (Campus-Wide)",
+                "user_email": getattr(request.user, "email", "HOD"),
+                "role": user_role,
+            },
+            "overview": {
+                "total_students": total_students,
+                "total_faculty": total_faculty,
+                "avg_dept_attendance": avg_dept_attendance,
+                "low_attendance_count": len(low_attendance_students),
+                "pending_corrections": cr_qs.filter(status="PENDING").count(),
+                "unassigned_subjects_count": unassigned_count,
+                "total_subjects": len(subject_stats),
+            },
+            "subjects": subject_stats,
+            "submissions": submissions,
+            "low_attendance_students": low_attendance_students,
+            "correction_requests": correction_requests,
+        })
+
+
+# ==========================================
+# 4. Student-Level Attendance for a Subject
+# ==========================================
+class SubjectStudentAttendanceView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        subject_id = request.query_params.get("subject_id")
+        if not subject_id:
+            return Response({"error": "subject_id parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        subject = get_object_or_404(Subject, id=subject_id)
+        sessions = AttendanceSession.objects.filter(subject=subject)
+        total_sessions = sessions.count()
+
+        # Find eligible students
+        assignment = SubjectAssignment.objects.filter(subject=subject).first()
+        target_dept = (assignment.department or subject.department) if assignment else subject.department
+        target_sem = (assignment.semester or subject.semester) if assignment else subject.semester
+
+        students = Student.objects.filter(status__iexact="active")
+        if target_dept:
+            students = students.filter(department=target_dept)
+        if target_sem:
+            students = students.filter(semester=target_sem)
+
+        student_list = []
+        for st in students.order_by("usn"):
+            records = AttendanceRecord.objects.filter(session__subject=subject, student=st)
+            attended = records.filter(status="Present").count()
+            missed = total_sessions - attended if total_sessions >= attended else 0
+            pct = round((attended / total_sessions * 100), 1) if total_sessions > 0 else None
+
+            if total_sessions == 0:
+                st_label = "No Sessions"
+            elif pct is not None and pct >= 75.0:
+                st_label = "Healthy"
+            else:
+                st_label = "Shortage (<75%)"
+
+            student_list.append({
+                "student_id": st.id,
+                "usn": st.usn,
+                "name": st.name,
+                "total_classes": total_sessions,
+                "attended_classes": attended,
+                "missed_classes": missed,
+                "percentage": pct,
+                "status": st_label,
+            })
+
+        return Response({
+            "subject_code": subject.subject_code,
+            "subject_name": subject.subject_name,
+            "total_sessions": total_sessions,
+            "students": student_list,
+        })
+
+
+# ==========================================
+# 5. Review Attendance Correction Request
+# ==========================================
+class AttendanceCorrectionReviewView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk, *args, **kwargs):
+        cr = get_object_or_404(AttendanceCorrectionRequest, id=pk)
+        action_type = (request.data.get("action") or "").upper()
+        remarks = request.data.get("remarks", "")
+
+        if action_type not in ["APPROVE", "REJECT"]:
+            return Response({"error": "action must be APPROVE or REJECT"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cr.remarks = remarks
+        cr.reviewed_by = request.user
+        cr.reviewed_at = timezone.now()
+
+        if action_type == "APPROVE":
+            cr.status = "APPROVED"
+            cr.save()
+
+            if cr.record:
+                cr.record.status = cr.requested_status
+                cr.record.save(update_fields=["status"])
+            elif cr.session:
+                AttendanceRecord.objects.update_or_create(
+                    session=cr.session,
+                    student=cr.student,
+                    defaults={"status": cr.requested_status}
+                )
+            return Response({"message": "Correction request approved and attendance record updated."})
+        else:
+            cr.status = "REJECTED"
+            cr.save()
+            return Response({"message": "Correction request rejected."})

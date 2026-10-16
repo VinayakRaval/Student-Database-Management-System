@@ -15,9 +15,11 @@ class FacultyAttendanceDashboard extends ConsumerStatefulWidget {
 class _FacultyAttendanceDashboardState
     extends ConsumerState<FacultyAttendanceDashboard> {
   List<Map<String, dynamic>> _allSlots = [];
+  List<Map<String, dynamic>> _assignedSubjects = [];
   bool _isLoading = true;
   String _selectedFilter = 'ALL';
   String _searchQuery = '';
+  String? _selectedFaculty;
   final TextEditingController _searchController = TextEditingController();
 
   final List<String> _weekDays = const [
@@ -32,7 +34,9 @@ class _FacultyAttendanceDashboardState
   @override
   void initState() {
     super.initState();
-    _loadSchedule();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSchedule();
+    });
   }
 
   @override
@@ -47,11 +51,29 @@ class _FacultyAttendanceDashboardState
   Future<void> _loadSchedule() async {
     setState(() => _isLoading = true);
     try {
-      final slots =
-          await ref.read(timetableProvider.notifier).fetchMySchedule();
+      var details =
+          await ref.read(timetableProvider.notifier).fetchScheduleDetails(personal: true);
+      var slots = (details['slots'] as List<Map<String, dynamic>>?) ?? [];
+      var assigned =
+          (details['assigned_subjects'] as List<Map<String, dynamic>>?) ?? [];
+
+      // Auto-retry once after a brief delay if empty (resolves web token/storage read timing)
+      if (slots.isEmpty && assigned.isEmpty) {
+        await Future.delayed(const Duration(milliseconds: 350));
+        if (mounted) {
+          details = await ref
+              .read(timetableProvider.notifier)
+              .fetchScheduleDetails(personal: true);
+          slots = (details['slots'] as List<Map<String, dynamic>>?) ?? [];
+          assigned =
+              (details['assigned_subjects'] as List<Map<String, dynamic>>?) ?? [];
+        }
+      }
+
       if (mounted) {
         setState(() {
           _allSlots = slots;
+          _assignedSubjects = assigned;
 
           final todayDay = _todayDay;
           final todaySlots =
@@ -88,6 +110,13 @@ class _FacultyAttendanceDashboardState
       filtered = _allSlots.where((s) => s['day'] == _selectedFilter).toList();
     }
 
+    // Apply faculty filter
+    if (_selectedFaculty != null && _selectedFaculty!.isNotEmpty) {
+      filtered = filtered
+          .where((s) => (s['faculty_name'] ?? '').toString() == _selectedFaculty)
+          .toList();
+    }
+
     // Apply search query
     if (_searchQuery.trim().isNotEmpty) {
       final query = _searchQuery.trim().toLowerCase();
@@ -96,10 +125,12 @@ class _FacultyAttendanceDashboardState
         final code = (slot['subject_code'] ?? '').toString().toLowerCase();
         final branch = (slot['branch_name'] ?? '').toString().toLowerCase();
         final day = (slot['day'] ?? '').toString().toLowerCase();
+        final fac = (slot['faculty_name'] ?? '').toString().toLowerCase();
         return name.contains(query) ||
             code.contains(query) ||
             branch.contains(query) ||
-            day.contains(query);
+            day.contains(query) ||
+            fac.contains(query);
       }).toList();
     }
 
@@ -292,6 +323,45 @@ class _FacultyAttendanceDashboardState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  List<String> get _facultyList {
+    final list = _allSlots
+        .map((s) => (s['faculty_name'] ?? '').toString().trim())
+        .where((f) => f.isNotEmpty && f != 'Not Assigned')
+        .toSet()
+        .toList();
+    list.sort();
+    return list;
+  }
+
+  Widget _buildFacultyChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF13246E) : const Color(0xFFF0F4F8),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF13246E) : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : const Color(0xFF13246E),
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 11,
+          ),
+        ),
       ),
     );
   }
@@ -713,9 +783,9 @@ class _FacultyAttendanceDashboardState
   Widget _buildZeroSlotsAssignedView() {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(32.0),
+      padding: const EdgeInsets.all(24.0),
       children: [
-        const SizedBox(height: 60),
+        const SizedBox(height: 20),
         Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -733,11 +803,13 @@ class _FacultyAttendanceDashboardState
               ),
               const SizedBox(height: 8),
               Text(
-                "There are no active timetable classes assigned to your faculty profile.\nAssigned classes will appear here once approved by the HOD or Coordinator.",
+                _assignedSubjects.isNotEmpty
+                    ? "You have ${_assignedSubjects.length} subjects assigned to your profile, but timetable slots have not yet been scheduled in the active timetable."
+                    : "There are no active timetable classes assigned to your faculty profile.\nAssigned classes will appear here once approved by the HOD or Coordinator.",
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               ElevatedButton.icon(
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text("Check Again"),
@@ -752,6 +824,92 @@ class _FacultyAttendanceDashboardState
                 ),
                 onPressed: _loadSchedule,
               ),
+
+              if (_assignedSubjects.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.indigo.shade100),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.assignment_turned_in,
+                              size: 18, color: Color(0xFF13246E)),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Your Assigned Subjects (${_assignedSubjects.length})",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: Color(0xFF13246E),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Once timetable slots for these subjects are scheduled, they will appear here automatically for marking attendance:",
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._assignedSubjects.map((sub) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.indigo.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    sub['subject_code'] ?? '',
+                                    style: TextStyle(
+                                      color: Colors.indigo.shade800,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    sub['subject_name'] ?? '',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                if (sub['semester'] != null)
+                                  Text(
+                                    "Sem ${sub['semester']}",
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          )),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

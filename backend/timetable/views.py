@@ -150,11 +150,13 @@ class TimeTableViewSet(viewsets.ModelViewSet):
             "id": a.id,
             "subject_code": getattr(getattr(a, "subject", None), "subject_code", ""),
             "subject_name": getattr(getattr(a, "subject", None), "subject_name", ""),
+            "subject_department": getattr(getattr(getattr(a, "subject", None), "department", None), "name", ""),
+            "student_department": getattr(getattr(a, "department", None), "name", ""),
             "faculty_id": getattr(getattr(a, "faculty", None), "id", None),
             "faculty_name": getattr(getattr(a, "faculty", None), "name", ""),
             "semester": getattr(a.semester, "sem_number", None) or getattr(getattr(getattr(a, "subject", None), "semester", None), "sem_number", None),
             "academic_year": getattr(getattr(a, "academic_year", None), "year_name", None),
-        } for a in qs.select_related("subject", "faculty", "semester", "academic_year")]
+        } for a in qs.select_related("subject", "subject__department", "faculty", "department", "semester", "academic_year")]
         return Response(data)
 
     def perform_create(self, serializer):
@@ -330,19 +332,35 @@ class TimeTableViewSet(viewsets.ModelViewSet):
                 if latest:
                     active_tt_ids.add(latest.id)
 
-        # 2. Get slots specifically assigned to THIS faculty profile
-        slots = TimeTableSlot.objects.filter(
-            assignment__faculty=faculty,
-            timetable_id__in=active_tt_ids
-        ).select_related(
-            "assignment__faculty",
-            "assignment__subject",
-            "assignment__subject__department",
-            "timetable__department",
-            "timetable__semester"
-        ).order_by("day", "start_time")
+        dept = _resolve_department_for_user(request.user)
+        is_personal = (request.query_params.get("personal", "")).lower() in ["true", "1"]
 
-        # 3. Optional filters: semester and search
+        # 2. Get slots: If personal=true, show only slots assigned to this faculty/lecturer.
+        # For HOD viewing department overview (e.g. attendance), show all department faculty slots.
+        if user_role in ["HOD", "HEAD OF DEPARTMENT"] and dept and not is_personal:
+            slots = TimeTableSlot.objects.filter(
+                Q(timetable__department=dept) | Q(assignment__department=dept) | Q(assignment__faculty=faculty),
+                timetable_id__in=active_tt_ids
+            ).select_related(
+                "assignment__faculty",
+                "assignment__subject",
+                "assignment__subject__department",
+                "timetable__department",
+                "timetable__semester"
+            ).order_by("day", "start_time")
+        else:
+            slots = TimeTableSlot.objects.filter(
+                assignment__faculty=faculty,
+                timetable_id__in=active_tt_ids
+            ).select_related(
+                "assignment__faculty",
+                "assignment__subject",
+                "assignment__subject__department",
+                "timetable__department",
+                "timetable__semester"
+            ).order_by("day", "start_time")
+
+        # 3. Optional filters: semester, search, and faculty
         sem_param = request.query_params.get("semester")
         if sem_param:
             slots = slots.filter(
@@ -352,31 +370,48 @@ class TimeTableViewSet(viewsets.ModelViewSet):
                 Q(assignment__subject__semester_id=sem_param)
             )
 
+        fac_param = request.query_params.get("faculty") or request.query_params.get("faculty_id")
+        if fac_param:
+            slots = slots.filter(assignment__faculty_id=fac_param)
+
         search_param = request.query_params.get("search")
         if search_param:
             slots = slots.filter(
                 Q(assignment__subject__subject_name__icontains=search_param) |
                 Q(assignment__subject__subject_code__icontains=search_param) |
+                Q(assignment__faculty__name__icontains=search_param) |
                 Q(day__icontains=search_param)
             )
 
         serializer = FacultyScheduleSerializer(slots, many=True)
         slot_list = list(serializer.data)
 
-        # 4. Fetch all subjects assigned to this faculty member
-        assigned_qs = SubjectAssignment.objects.filter(faculty=faculty).select_related(
-            "subject", "subject__department", "subject__semester", "semester", "academic_year"
-        )
+        # 4. Fetch assigned subjects:
+        # If personal=true or Professor: show ONLY subjects assigned to this lecturer personally
+        if user_role in ["HOD", "HEAD OF DEPARTMENT"] and dept and not is_personal:
+            assigned_qs = SubjectAssignment.objects.filter(
+                Q(department=dept) | Q(subject__department=dept) | Q(faculty=faculty)
+            ).select_related(
+                "subject", "subject__department", "subject__semester", "semester", "academic_year", "faculty"
+            )
+        else:
+            assigned_qs = SubjectAssignment.objects.filter(faculty=faculty).select_related(
+                "subject", "subject__department", "subject__semester", "semester", "academic_year", "faculty"
+            )
+
         if sem_param:
             assigned_qs = assigned_qs.filter(
                 Q(semester_id=sem_param) |
                 Q(semester__sem_number=sem_param) |
                 Q(subject__semester_id=sem_param)
             )
+        if fac_param:
+            assigned_qs = assigned_qs.filter(faculty_id=fac_param)
         if search_param:
             assigned_qs = assigned_qs.filter(
                 Q(subject__subject_name__icontains=search_param) |
-                Q(subject__subject_code__icontains=search_param)
+                Q(subject__subject_code__icontains=search_param) |
+                Q(faculty__name__icontains=search_param)
             )
 
         assigned_subjects = []
@@ -388,18 +423,22 @@ class TimeTableViewSet(viewsets.ModelViewSet):
                 "subject_id": a.subject.id,
                 "subject_code": a.subject.subject_code,
                 "subject_name": a.subject.subject_name,
+                "faculty_name": getattr(getattr(a, "faculty", None), "name", "Not Assigned"),
                 "semester": sem_num,
                 "department": getattr(a.department or a.subject.department, "name", ""),
                 "academic_year": getattr(a.academic_year, "year_name", ""),
                 "slots_count": sched_count,
+                "is_elective": getattr(a.subject, "is_elective", False),
             })
 
         return Response({
             "results": slot_list,
             "slots": slot_list,
             "assigned_subjects": assigned_subjects,
-            "faculty_name": faculty.name,
-            "faculty_id": faculty.faculty_id
+            "faculty_name": faculty.name if faculty else "HOD",
+            "faculty_id": getattr(faculty, "faculty_id", ""),
+            "department_name": dept.name if dept else "",
+            "role": user_role,
         }, status=status.HTTP_200_OK)
 
     # --- 4. Role specific lists ---

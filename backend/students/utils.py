@@ -1,24 +1,40 @@
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
+import logging
 from django.utils import timezone
 from django.conf import settings
+from userlogin.models import AccountInvitation
+from userlogin.email_service import send_password_setup_invitation
 
-def send_approval_email(student):
-    subject = "Student Admission Approval - College Portal"
-    from_email = settings.DEFAULT_FROM_EMAIL
-    to = [student.email]
+logger = logging.getLogger(__name__)
 
-    context = {
-        "student_name": student.name,
-        "student_admission_id": student.admission_id,
-        "password": student.temporary_password,
-        "login_url": "https://your-app-login-url.com",
-        "college_name": "Government Engineering College, Chamarajanagar",
-        "year": timezone.now().year,
-    }
 
-    html_message = render_to_string("email/student_approval.html", context)
+def send_approval_email(student, created_by=None):
+    """
+    Sends a secure password setup invitation to the approved student.
+    Uses non-blocking asynchronous email delivery so requests return instantly.
+    """
+    if not student:
+        return False
 
-    msg = EmailMultiAlternatives(subject, "", from_email, to)
-    msg.attach_alternative(html_message, "text/html")
-    msg.send()
+    user = student.user
+    if not user:
+        logger.warning(f"Student {student.id} has no linked user account.")
+        return False
+
+    # Create secure one-time setup invitation
+    invitation, raw_token = AccountInvitation.create_invitation(
+        user=user,
+        created_by=created_by,
+        invitation_type=AccountInvitation.TYPE_INITIAL_SETUP,
+        expiry_hours=24
+    )
+
+    # Dispatch email asynchronously in background thread
+    return send_password_setup_invitation(
+        user=user,
+        raw_token=raw_token,
+        recipient_name=student.name,
+        id_value=student.usn or student.admission_id,
+        role="Student",
+        invitation_type=AccountInvitation.TYPE_INITIAL_SETUP,
+        expiry_hours=24
+    )

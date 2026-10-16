@@ -125,6 +125,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
   bool _isLoading = true;
   String? _error;
   String _selectedFilter = 'all';
+  int? _selectedSemester;
   String _searchQuery = '';
 
   @override
@@ -224,6 +225,39 @@ class _StudentListScreenState extends State<StudentListScreen> {
           SnackBar(
             content: Text(err),
             backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resendStudentInvitation(int id, String name) async {
+    try {
+      final dio = ApiClient().dio;
+      final res = await dio.post('/students/$id/resend-invitation/');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res.data['message']?.toString() ?? 'Password setup invitation resent to $name!'),
+            backgroundColor: const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        String err = 'Failed to resend invitation';
+        if (e is DioException && e.response?.data != null) {
+          final d = e.response!.data;
+          if (d is Map && d.containsKey('error')) {
+            err = d['error'].toString();
+          }
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(err),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -383,6 +417,67 @@ class _StudentListScreenState extends State<StudentListScreen> {
     }
   }
 
+  Future<void> _promoteStudent(StudentItem student) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.arrow_upward_rounded, color: Color(0xFF13246E), size: 28),
+            SizedBox(width: 8),
+            Text("Promote Student", style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          "Promote student '${student.name}' (${student.admissionId})\nCurrently in ${student.semesterName} to the next semester?",
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF13246E),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Confirm Promote"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        final dio = ApiClient().dio;
+        final res = await dio.put('/students/${student.id}/promote/');
+        if (mounted) {
+          final msg = (res.data is Map && res.data['message'] != null)
+              ? res.data['message'].toString()
+              : "Student promoted successfully!";
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: Colors.green),
+          );
+          _fetchStudents();
+        }
+      } catch (e) {
+        if (mounted) {
+          String err = "Promotion failed";
+          if (e is DioException && e.response?.data != null) {
+            final d = e.response!.data;
+            err = d is Map && d['error'] != null ? d['error'].toString() : d.toString();
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   void _showStudentDetailsModal(StudentItem student) {
     showModalBottomSheet(
       context: context,
@@ -410,6 +505,10 @@ class _StudentListScreenState extends State<StudentListScreen> {
           Navigator.pop(ctx);
           _deleteStudentDialog(student);
         },
+        onPromote: () {
+          Navigator.pop(ctx);
+          _promoteStudent(student);
+        },
       ),
     );
   }
@@ -427,6 +526,12 @@ class _StudentListScreenState extends State<StudentListScreen> {
         if (_selectedFilter == 'pending' && s.registrationStatus != 'registered' && s.registrationStatus != 'pending') {
           return false;
         } else if (_selectedFilter != 'pending' && s.registrationStatus != _selectedFilter) {
+          return false;
+        }
+      }
+      if (_selectedSemester != null) {
+        final semStr = _selectedSemester.toString();
+        if (!s.semesterName.contains(semStr)) {
           return false;
         }
       }
@@ -472,23 +577,68 @@ class _StudentListScreenState extends State<StudentListScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: "Search student by name, USN, Admission ID, or Dept...",
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: const Color(0xFFF0F4F8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: "Search student by name, USN, Admission ID...",
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFF0F4F8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val.trim();
+                          });
+                        },
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                  ),
-                  onChanged: (val) {
-                    setState(() {
-                      _searchQuery = val.trim();
-                    });
-                  },
+                    const SizedBox(width: 10),
+                    // Semester Filter Dropdown
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0F4F8),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int?>(
+                            value: _selectedSemester,
+                            isExpanded: true,
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF13246E)),
+                            hint: const Text("All Semesters", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                            items: [
+                              const DropdownMenuItem<int?>(
+                                value: null,
+                                child: Text("All Semesters", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              ),
+                              ...List.generate(
+                                8,
+                                (i) => DropdownMenuItem<int?>(
+                                  value: i + 1,
+                                  child: Text("Semester ${i + 1}", style: const TextStyle(fontSize: 13)),
+                                ),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedSemester = val;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 SingleChildScrollView(
@@ -502,6 +652,15 @@ class _StudentListScreenState extends State<StudentListScreen> {
                       _buildFilterChip('verified', 'Verified'),
                       const SizedBox(width: 8),
                       _buildFilterChip('approved', 'Approved'),
+                      if (_selectedSemester != null) ...[
+                        const SizedBox(width: 8),
+                        ActionChip(
+                          avatar: const Icon(Icons.close, size: 16, color: Color(0xFF13246E)),
+                          label: Text("Clear Sem $_selectedSemester", style: const TextStyle(fontSize: 12, color: Color(0xFF13246E))),
+                          onPressed: () => setState(() => _selectedSemester = null),
+                          backgroundColor: const Color(0xFF13246E).withValues(alpha: 0.1),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -745,6 +904,19 @@ class _StudentListScreenState extends State<StudentListScreen> {
                     ),
                   ],
 
+                  // Resend Password Setup Invitation
+                  if (student.registrationStatus == 'approved' && (isPrincipal || isHod || isAdmission))
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.mark_email_read_rounded, size: 16),
+                      label: const Text("Resend Setup Link"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF13246E),
+                        side: const BorderSide(color: Color(0xFF13246E)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => _resendStudentInvitation(student.id, student.name),
+                    ),
+
                   // Details Button
                   TextButton.icon(
                     icon: const Icon(Icons.visibility_outlined, size: 16),
@@ -768,6 +940,7 @@ class _StudentDetailsSheet extends StatelessWidget {
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final VoidCallback onDelete;
+  final VoidCallback? onPromote;
 
   const _StudentDetailsSheet({
     required this.student,
@@ -776,6 +949,7 @@ class _StudentDetailsSheet extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onDelete,
+    this.onPromote,
   });
 
   @override
@@ -915,6 +1089,17 @@ class _StudentDetailsSheet extends StatelessWidget {
                   icon: const Icon(Icons.delete_outline, size: 18),
                   label: const Text("Delete Student"),
                   onPressed: onDelete,
+                ),
+              if ((isHod || isPrincipal) && onPromote != null && student.registrationStatus == 'approved')
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF13246E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                  label: const Text("Promote Semester"),
+                  onPressed: onPromote,
                 ),
             ],
           ),

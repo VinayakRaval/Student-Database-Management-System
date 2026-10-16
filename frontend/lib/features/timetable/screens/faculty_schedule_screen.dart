@@ -35,22 +35,43 @@ class _FacultyScheduleScreenState extends ConsumerState<FacultyScheduleScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final data = await ref
+      var data = await ref
           .read(timetableProvider.notifier)
           .fetchScheduleDetails(
             semester: _selectedSemester,
             search: _searchQuery,
+            personal: true,
           );
+
+      var slots = List<Map<String, dynamic>>.from(data['slots'] ?? []);
+      var assigned = List<Map<String, dynamic>>.from(data['assigned_subjects'] ?? []);
+      var facultyName = data['faculty_name']?.toString() ?? '';
+
+      // Auto retry once if empty (handles async auth token resolution on web/refresh)
+      if (slots.isEmpty && assigned.isEmpty && mounted) {
+        await Future.delayed(const Duration(milliseconds: 350));
+        if (mounted) {
+          data = await ref
+              .read(timetableProvider.notifier)
+              .fetchScheduleDetails(
+                semester: _selectedSemester,
+                search: _searchQuery,
+                personal: true,
+              );
+          slots = List<Map<String, dynamic>>.from(data['slots'] ?? []);
+          assigned = List<Map<String, dynamic>>.from(data['assigned_subjects'] ?? []);
+          facultyName = data['faculty_name']?.toString() ?? '';
+        }
+      }
 
       if (mounted) {
         setState(() {
-          _slots = List<Map<String, dynamic>>.from(data['slots'] ?? []);
-          _assignedSubjects = List<Map<String, dynamic>>.from(
-            data['assigned_subjects'] ?? [],
-          );
-          _facultyName = data['faculty_name']?.toString() ?? '';
+          _slots = slots;
+          _assignedSubjects = assigned;
+          _facultyName = facultyName;
         });
       }
     } catch (e) {

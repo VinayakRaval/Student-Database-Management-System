@@ -47,17 +47,18 @@ class TimetableListScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text(
-          'Timetables',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        centerTitle: true,
+        title: Text(
+          role == AppRoles.student ? 'My Timetable' : 'Timetables',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: const Color(0xFF13246E),
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
             tooltip: 'Refresh timetables',
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
               ref.invalidate(timetableListProvider(filter));
             },

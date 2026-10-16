@@ -14,15 +14,20 @@ class StudentFeeListScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("My Fee Details", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        centerTitle: true,
+        title: const Text(
+          "My Fee Details",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+        ),
+        backgroundColor: const Color(0xFF13246E),
+        foregroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black87,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: "Refresh Fees",
             onPressed: () => ref.invalidate(studentFeeListProvider),
-          )
+          ),
         ],
       ),
       body: feesAsync.when(

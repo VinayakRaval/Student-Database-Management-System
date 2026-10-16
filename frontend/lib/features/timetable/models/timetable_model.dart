@@ -56,6 +56,8 @@ class TimeTableSlot {
   final String? subjectCode; // Added this field
   final String? subjectName;
   final String? facultyName;
+  final String? subjectDepartment;
+  final String? studentDepartment;
 
   TimeTableSlot({
     this.id,
@@ -66,6 +68,8 @@ class TimeTableSlot {
     this.subjectCode,
     this.subjectName,
     this.facultyName,
+    this.subjectDepartment,
+    this.studentDepartment,
   });
 
   factory TimeTableSlot.fromMap(Map<String, dynamic> map) {
@@ -76,9 +80,11 @@ class TimeTableSlot {
       startTime: map['start_time'],
       endTime: map['end_time'],
       assignmentId: map['assignment'],
-      subjectCode: info['subject_code'] ?? '', // Extract code
-      subjectName: info['subject_name'] ?? 'Unknown Subject',
-      facultyName: info['faculty_name'] ?? 'Unknown Faculty',
+      subjectCode: info['subject_code']?.toString() ?? '', // Extract code
+      subjectName: info['subject_name']?.toString() ?? 'Unknown Subject',
+      facultyName: info['faculty_name']?.toString() ?? 'Unknown Faculty',
+      subjectDepartment: info['subject_department']?.toString(),
+      studentDepartment: info['student_department']?.toString(),
     );
   }
 
@@ -97,14 +103,24 @@ class AssignmentOption {
   final int id;
   final String subjectName;
   final String facultyName;
+  final String? subjectCode;
+  final String? subjectDepartment;
 
-  AssignmentOption({required this.id, required this.subjectName, required this.facultyName});
+  AssignmentOption({
+    required this.id,
+    required this.subjectName,
+    required this.facultyName,
+    this.subjectCode,
+    this.subjectDepartment,
+  });
 
   factory AssignmentOption.fromMap(Map<String, dynamic> map) {
     return AssignmentOption(
       id: map['id'],
       subjectName: map['subject_name'] ?? '',
       facultyName: map['faculty_name'] ?? '',
+      subjectCode: map['subject_code']?.toString(),
+      subjectDepartment: map['subject_department']?.toString(),
     );
   }
 }

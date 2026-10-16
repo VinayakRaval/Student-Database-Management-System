@@ -9,6 +9,7 @@ import 'package:frontend/features/auth/screens/landing_page.dart';
 import 'package:frontend/features/reports/screens/reports_screen.dart';
 import 'package:frontend/features/auth/screens/login_page.dart';
 import 'package:frontend/features/auth/screens/forgot_password_page.dart';
+import 'package:frontend/features/auth/screens/setup_password_screen.dart';
 import 'package:frontend/features/dashboard/screens/dashboard_screen.dart';
 import 'package:frontend/features/profile/screens/profile_screen.dart';
 import 'package:frontend/shared/shell/responsive_shell.dart';
@@ -55,6 +56,43 @@ import 'package:frontend/features/subjects/screens/assign_subject_screen.dart';
 // Academics & Department
 import 'package:frontend/features/academics/screens/department_screen.dart';
 
+// Attendance Monitoring
+import 'package:frontend/features/attendance/screens/attendance_monitoring_screen.dart';
+
+// HOD IA Performance
+import 'package:frontend/features/ia_assessment/screens/hod_ia_performance_screen.dart';
+
+// HOD Reports
+import 'package:frontend/features/reports/screens/hod_reports_screen.dart';
+
+// Announcements
+import 'package:frontend/features/announcements/screens/department_announcements_screen.dart';
+import 'package:frontend/features/announcements/screens/campus_announcements_screen.dart';
+
+// Student Features & Notifications
+import 'package:frontend/features/notifications/screens/notifications_screen.dart';
+import 'package:frontend/features/ia_assessment/screens/student_ia_marks_screen.dart';
+import 'package:frontend/features/students/screens/student_results_screen.dart';
+import 'package:frontend/features/students/screens/student_grievances_screen.dart';
+import 'package:frontend/features/students/screens/student_academic_status_screen.dart';
+import 'package:frontend/features/library/screens/library_screen.dart';
+import 'package:frontend/features/library/screens/library_officer_dashboard.dart';
+import 'package:frontend/features/library/screens/add_book_screen.dart';
+import 'package:frontend/features/library/screens/issue_book_screen.dart';
+import 'package:frontend/features/library/screens/book_catalogue_screen.dart';
+import 'package:frontend/features/library/screens/issue_return_desk_screen.dart';
+import 'package:frontend/features/library/screens/book_requests_screen.dart';
+import 'package:frontend/features/library/screens/fines_dues_screen.dart';
+import 'package:frontend/features/library/screens/library_notifications_screen.dart';
+import 'package:frontend/features/library/screens/library_cards_desk_screen.dart';
+import 'package:frontend/features/library/screens/create_library_card_screen.dart';
+import 'package:frontend/features/library/screens/hod_library_cards_screen.dart';
+import 'package:frontend/features/library/screens/library_configuration_screen.dart';
+import 'package:frontend/features/library/screens/borrowers_screen.dart';
+import 'package:frontend/features/library/screens/issue_history_screen.dart';
+import 'package:frontend/features/library/screens/library_feedback_screen.dart';
+import 'package:frontend/features/library/screens/library_reports_screen.dart';
+
 void main() {
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -83,10 +121,11 @@ class MyApp extends StatelessWidget {
         final loggedIn = auth.isLoggedIn;
         final location = state.uri.toString();
 
-        // Public routes â€” no auth needed
+        // Public routes — no auth needed
         if (location == '/' ||
             location == '/login' ||
             location == '/forgot-password' ||
+            location.startsWith('/setup-password') ||
             location == '/admissions/register' ||
             location == '/fee-upload' ||
             location.startsWith('/fee-upload')) {
@@ -109,6 +148,12 @@ class MyApp extends StatelessWidget {
           builder: (c, s) => const ForgotPasswordPage(),
         ),
         GoRoute(
+          path: '/setup-password',
+          builder: (c, s) => SetupPasswordScreen(
+            token: s.uri.queryParameters['token'],
+          ),
+        ),
+        GoRoute(
           path: '/admissions/register',
           builder: (c, s) => const StudentRegistrationScreen(),
         ),
@@ -119,7 +164,10 @@ class MyApp extends StatelessWidget {
 
         // AUTHENTICATED ROUTES (with sidebar)
         ShellRoute(
-          builder: (context, state, child) => ResponsiveShell(child: child),
+          builder: (context, state, child) => ResponsiveShell(
+            currentPath: state.uri.path,
+            child: child,
+          ),
           routes: [
             GoRoute(
               path: '/dashboard',
@@ -231,6 +279,14 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const FacultyAttendanceDashboard(),
             ),
             GoRoute(
+              path: '/attendance/monitoring',
+              builder: (c, s) => const AttendanceMonitoringScreen(),
+            ),
+            GoRoute(
+              path: '/attendance/department',
+              builder: (c, s) => const AttendanceMonitoringScreen(),
+            ),
+            GoRoute(
               path: '/attendance/mark/:slotId',
               builder: (c, s) {
                 final slotId = int.tryParse(s.pathParameters['slotId'] ?? '') ?? 0;
@@ -246,6 +302,46 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const StudentAttendanceView(),
             ),
             GoRoute(
+              path: '/ia/performance',
+              builder: (c, s) => const HODIAPerformanceScreen(),
+            ),
+            GoRoute(
+              path: '/reports/department',
+              builder: (c, s) => const HODReportsScreen(),
+            ),
+            GoRoute(
+              path: '/announcements/department',
+              builder: (c, s) => const DepartmentAnnouncementsScreen(),
+            ),
+            GoRoute(
+              path: '/announcements/campus',
+              builder: (c, s) => const CampusAnnouncementsScreen(),
+            ),
+            GoRoute(
+              path: '/announcements/student',
+              builder: (c, s) => const NotificationsScreen(),
+            ),
+            GoRoute(
+              path: '/notifications',
+              builder: (c, s) => const NotificationsScreen(),
+            ),
+            GoRoute(
+              path: '/ia/student',
+              builder: (c, s) => const StudentIAMarksScreen(),
+            ),
+            GoRoute(
+              path: '/student/results',
+              builder: (c, s) => const StudentResultsScreen(),
+            ),
+            GoRoute(
+              path: '/student/grievances',
+              builder: (c, s) => const StudentGrievancesScreen(),
+            ),
+            GoRoute(
+              path: '/student/academic-status',
+              builder: (c, s) => const StudentAcademicStatusScreen(),
+            ),
+            GoRoute(
               path: '/ia/create/:subjectId',
               builder: (c, s) {
                 final subjectId = int.tryParse(s.pathParameters['subjectId'] ?? '') ?? 0;
@@ -258,7 +354,92 @@ class MyApp extends StatelessWidget {
             ),
             GoRoute(
               path: '/library',
-              builder: (c, s) => const PlaceholderScreen(title: 'Library'),
+              builder: (c, s) {
+                final auth = provider.Provider.of<AuthProvider>(c, listen: false);
+                final role = auth.role?.toUpperCase() ?? '';
+                if (role == 'LIBRARY') {
+                  return const LibraryOfficerDashboard();
+                }
+                return const LibraryScreen();
+              },
+            ),
+            GoRoute(
+              path: '/library/officer',
+              builder: (c, s) => const LibraryOfficerDashboard(),
+            ),
+            GoRoute(
+              path: '/library/catalog',
+              builder: (c, s) => const BookCatalogueScreen(),
+            ),
+            GoRoute(
+              path: '/library/desk',
+              builder: (c, s) => const IssueReturnDeskScreen(),
+            ),
+            GoRoute(
+              path: '/library/requests',
+              builder: (c, s) => const BookRequestsScreen(),
+            ),
+            GoRoute(
+              path: '/library/fines',
+              builder: (c, s) => const FinesDuesScreen(),
+            ),
+            GoRoute(
+              path: '/library/books/add',
+              builder: (c, s) => const AddBookScreen(),
+            ),
+            GoRoute(
+              path: '/library/issue-book',
+              builder: (c, s) {
+                final bookIdStr = s.uri.queryParameters['bookId'];
+                final bookId = bookIdStr != null ? int.tryParse(bookIdStr) : null;
+                return IssueBookScreen(preselectedBookId: bookId);
+              },
+            ),
+            GoRoute(
+              path: '/library/cards',
+              builder: (c, s) => const LibraryCardsDeskScreen(),
+            ),
+            GoRoute(
+              path: '/library/cards/create',
+              builder: (c, s) {
+                final cardIdStr = s.uri.queryParameters['cardId'];
+                final cardId = cardIdStr != null ? int.tryParse(cardIdStr) : null;
+                final identifier = s.uri.queryParameters['identifier'];
+                final borrowerType = s.uri.queryParameters['borrowerType'];
+                return CreateLibraryCardScreen(
+                  existingCardId: cardId,
+                  initialIdentifier: identifier,
+                  initialBorrowerType: borrowerType,
+                );
+              },
+            ),
+            GoRoute(
+              path: '/library/notifications',
+              builder: (c, s) => const LibraryNotificationsScreen(),
+            ),
+            GoRoute(
+              path: '/library/configuration',
+              builder: (c, s) => const LibraryConfigurationScreen(),
+            ),
+            GoRoute(
+              path: '/library/borrowers',
+              builder: (c, s) => const BorrowersScreen(),
+            ),
+            GoRoute(
+              path: '/library/history',
+              builder: (c, s) => const IssueHistoryScreen(),
+            ),
+            GoRoute(
+              path: '/library/feedback',
+              builder: (c, s) => const LibraryFeedbackScreen(),
+            ),
+            GoRoute(
+              path: '/library/reports',
+              builder: (c, s) => const LibraryReportsScreen(),
+            ),
+            GoRoute(
+              path: '/hod/library-cards',
+              builder: (c, s) => const HodLibraryCardsScreen(),
             ),
             GoRoute(
               path: '/exams',

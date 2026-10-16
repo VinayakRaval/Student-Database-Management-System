@@ -95,7 +95,30 @@ class LibraryAPITests(APITestCase):
         self.assertTrue(copies.exists())
         for c in copies:
             self.assertIsNotNone(c.barcode)
-            self.assertTrue(c.shelf_location)  # either generated or default
+            self.assertTrue(c.shelf_location)
+
+    def test_student_cannot_create_or_delete_book(self):
+        # Student cannot create book
+        payload = {"title": "Hacking 101", "department_id": self.dept.id}
+        res = self.student_client.post("/library/books/", data=payload, format="json")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Student cannot delete book
+        res_del = self.student_client.delete(f"/library/books/{self.book.id}/")
+        self.assertEqual(res_del.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_add_copies_validates_count(self):
+        # Negative count rejected
+        res_neg = self.lib_client.post(f"/library/books/{self.book.id}/add_copies/", data={"count": -1}, format="json")
+        self.assertEqual(res_neg.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Zero count rejected
+        res_zero = self.lib_client.post(f"/library/books/{self.book.id}/add_copies/", data={"count": 0}, format="json")
+        self.assertEqual(res_zero.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Excessive count (> 100) rejected
+        res_huge = self.lib_client.post(f"/library/books/{self.book.id}/add_copies/", data={"count": 500}, format="json")
+        self.assertEqual(res_huge.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_bookcopy_save_auto_barcode_and_shelf(self):
         # Create a book and a copy without barcode/shelf -> save() should fill them
@@ -106,14 +129,17 @@ class LibraryAPITests(APITestCase):
 
     # ---------- EBook ----------
     def test_upload_ebook(self):
-        # upload ebook file via API (file can be empty in tests)
+        # upload ebook file via API
         payload = {
             "book_id": self.book.id
         }
-        # using file isn't required for this test - just check create path works
         res = self.lib_client.post("/library/ebooks/", data=payload, format="json")
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertIn("id", res.data)
+
+        # Student cannot upload ebook
+        res_stu = self.student_client.post("/library/ebooks/", data=payload, format="json")
+        self.assertEqual(res_stu.status_code, status.HTTP_403_FORBIDDEN)
 
     # ---------- Book Request flow ----------
     def test_student_create_request_and_verify_and_final_approve(self):
@@ -133,12 +159,18 @@ class LibraryAPITests(APITestCase):
         pr = BookRequest.objects.get(id=req_id)
         self.assertEqual(pr.status, BookRequest.REQUEST_STATUS_VERIFIED)
 
-        # Principal can final_approve only if verified
+        # Principal can final_approve only if verified -> sets status to approved
         res_final = self.principal_client.post(f"/library/requests/{req_id}/final_approve/")
         self.assertEqual(res_final.status_code, status.HTTP_200_OK)
         pr.refresh_from_db()
-        self.assertEqual(pr.status, BookRequest.REQUEST_STATUS_PURCHASED)
+        self.assertEqual(pr.status, BookRequest.REQUEST_STATUS_APPROVED)
         self.assertEqual(pr.forwarded_to.email, self.principal.email)
+
+        # Library officer marks purchased
+        res_purchased = self.lib_client.post(f"/library/requests/{req_id}/mark_purchased/")
+        self.assertEqual(res_purchased.status_code, status.HTTP_200_OK)
+        pr.refresh_from_db()
+        self.assertEqual(pr.status, BookRequest.REQUEST_STATUS_PURCHASED)
 
     def test_final_approve_without_verify_fails(self):
         # create a fresh request
@@ -156,9 +188,8 @@ class LibraryAPITests(APITestCase):
         copy = BookCopy.objects.create(book=self.book, copy_number=1)
         self.assertEqual(copy.status, BookCopy.STATUS_AVAILABLE)
 
-        # Student issues the copy
-        due_date = (date.today() + timedelta(days=7)).isoformat()
-        res_issue = self.student_client.post("/library/issues/", {"copy_id": copy.id, "due_date": due_date}, format="json")
+        # Student issues the copy (server calculates 14-day due date)
+        res_issue = self.student_client.post("/library/issues/", {"copy_id": copy.id}, format="json")
         self.assertEqual(res_issue.status_code, status.HTTP_201_CREATED)
         issue_id = res_issue.data["id"]
         issue = IssueRecord.objects.get(id=issue_id)
@@ -178,7 +209,7 @@ class LibraryAPITests(APITestCase):
 
         # Now create another issue and mark lost
         copy2 = BookCopy.objects.create(book=self.book, copy_number=2)
-        res_issue2 = self.student_client.post("/library/issues/", {"copy_id": copy2.id, "due_date": due_date}, format="json")
+        res_issue2 = self.student_client.post("/library/issues/", {"copy_id": copy2.id}, format="json")
         self.assertEqual(res_issue2.status_code, status.HTTP_201_CREATED)
         issue2 = IssueRecord.objects.get(id=res_issue2.data["id"])
 
@@ -194,15 +225,14 @@ class LibraryAPITests(APITestCase):
         fine = Fine.objects.get(id=data["fine_id"])
         self.assertTrue(fine.amount >= 0)
 
-    # ---------- Fine assign and mark paid ----------
+    # ---------- Fine assign and verified mark paid ----------
     def test_assign_fine_and_mark_paid(self):
         # create issue and fine
         copy = BookCopy.objects.create(book=self.book, copy_number=3)
-        due_date = (date.today() + timedelta(days=7)).isoformat()
-        issue_resp = self.student_client.post("/library/issues/", {"copy_id": copy.id, "due_date": due_date}, format="json")
+        issue_resp = self.student_client.post("/library/issues/", {"copy_id": copy.id}, format="json")
         issue = IssueRecord.objects.get(id=issue_resp.data["id"])
 
-        # create manual fine record (simulate mark_lost or assigned manually)
+        # create manual fine record
         fine = Fine.objects.create(issue=issue, amount=50.00)
 
         # non-officer cannot assign (should be 403)
@@ -210,16 +240,23 @@ class LibraryAPITests(APITestCase):
         self.assertEqual(res_non.status_code, status.HTTP_403_FORBIDDEN)
 
         # library officer assigns fine
-        res_assign = self.lib_client.post(f"/library/fines/{fine.id}/assign/", {"amount": 100, "reason": "Lost"}, format="json")
+        res_assign = self.lib_client.post(f"/library/fines/{fine.id}/assign/", {"amount": 100, "reason": "Damaged cover"}, format="json")
         self.assertEqual(res_assign.status_code, status.HTTP_200_OK)
         fine.refresh_from_db()
-        self.assertEqual(str(fine.amount), "100.00")  # Decimal -> string compare
+        self.assertEqual(str(fine.amount), "100.00")
 
-        # mark paid (any authenticated user can mark_paid)
-        res_paid = self.student_client.post(f"/library/fines/{fine.id}/mark_paid/", {"payment_reference": "UPI123"}, format="json")
+        # Security check: Student CANNOT mark their own fine as paid directly!
+        res_stu_paid = self.student_client.post(f"/library/fines/{fine.id}/mark_paid/", {"payment_reference": "FAKE123"}, format="json")
+        self.assertEqual(res_stu_paid.status_code, status.HTTP_403_FORBIDDEN)
+        fine.refresh_from_db()
+        self.assertFalse(fine.paid)
+
+        # Library Officer marks fine as paid with verified receipt reference
+        res_paid = self.lib_client.post(f"/library/fines/{fine.id}/mark_paid/", {"payment_reference": "REC-LIB-2026-09"}, format="json")
         self.assertEqual(res_paid.status_code, status.HTTP_200_OK)
         fine.refresh_from_db()
         self.assertTrue(fine.paid)
+        self.assertEqual(fine.payment_reference, "REC-LIB-2026-09")
         self.assertIsNotNone(fine.paid_at)
 
     # ---------- Audit logs created ----------

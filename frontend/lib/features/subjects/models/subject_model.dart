@@ -4,6 +4,7 @@ class SubjectAddModel {
   final int semesterId;
   final String subjectName;
   final String subjectCode;
+  final bool isElective;
 
   SubjectAddModel({
     required this.schemaId,
@@ -11,6 +12,7 @@ class SubjectAddModel {
     required this.semesterId,
     required this.subjectName,
     required this.subjectCode,
+    this.isElective = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class SubjectAddModel {
       'semester': semesterId,
       'subject_name': subjectName,
       'subject_code': subjectCode,
+      'is_elective': isElective,
     };
   }
 }

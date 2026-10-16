@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:frontend/core/providers/auth_riverpod_bridge.dart';
 import 'package:frontend/core/constants/api_constants.dart';
+import 'package:frontend/core/network/api_client.dart';
 import '../providers/faculty_provider.dart';
 import '../models/faculty_model.dart';
 import '../widgets/edit_faculty_dialog.dart';
@@ -263,24 +264,50 @@ class FacultyDetailScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   color: Colors.white,
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      label: const Text(
-                        "EDIT FACULTY DETAILS",
-                        style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF13246E),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  child: Column(
+                    children: [
+                      if (faculty.status.toLowerCase() == 'approved') ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.mark_email_read_rounded, size: 18),
+                            label: const Text(
+                              "RESEND PASSWORD SETUP EMAIL",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF059669),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: () => _resendFacultyInvite(context, faculty.id, faculty.name),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          label: const Text(
+                            "EDIT FACULTY DETAILS",
+                            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF13246E),
+                            side: const BorderSide(color: Color(0xFF13246E)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => EditFacultyDialog.show(context, faculty),
                         ),
                       ),
-                      onPressed: () => EditFacultyDialog.show(context, faculty),
-                    ),
+                    ],
                   ),
                 ),
             ],
@@ -314,6 +341,32 @@ class FacultyDetailScreen extends ConsumerWidget {
       ref.invalidate(facultyListProvider);
       ref.invalidate(facultyDetailProvider(id));
       context.pop(); // Go back to list
+    }
+  }
+
+  Future<void> _resendFacultyInvite(BuildContext context, int id, String name) async {
+    try {
+      final dio = ApiClient().dio;
+      final res = await dio.post('/faculty/$id/resend_invitation/');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res.data['message']?.toString() ?? 'Password setup invitation resent to $name!'),
+            backgroundColor: const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to resend invitation: $e"),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

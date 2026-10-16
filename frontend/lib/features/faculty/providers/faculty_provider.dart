@@ -101,7 +101,22 @@ class FacultyController extends StateNotifier<FacultyState> {
     } on DioException catch (e) {
       String errorMsg = "Registration Failed";
       if (e.response?.data != null) {
-        errorMsg = e.response?.data.toString() ?? "Unknown Error";
+        if (e.response?.data is Map) {
+          final map = e.response!.data as Map;
+          final messages = <String>[];
+          map.forEach((k, v) {
+            if (v is List) {
+              messages.add("$k: ${v.join(', ')}");
+            } else {
+              messages.add("$k: $v");
+            }
+          });
+          errorMsg = messages.join("\n");
+        } else {
+          errorMsg = e.response?.data.toString() ?? "Registration Failed";
+        }
+      } else if (e.message != null) {
+        errorMsg = e.message!;
       }
       state = state.copyWith(isLoading: false, errorMessage: errorMsg);
     } catch (e) {

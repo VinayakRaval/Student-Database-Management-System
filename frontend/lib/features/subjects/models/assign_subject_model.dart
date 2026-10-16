@@ -43,8 +43,16 @@ class AssignOption {
   final int id;
   final String name;
   final String? code; // Extra field for Subject Code
+  final String? departmentName; // Extra field for Department Name
+  final bool isElective;
 
-  AssignOption({required this.id, required this.name, this.code});
+  AssignOption({
+    required this.id, 
+    required this.name, 
+    this.code, 
+    this.departmentName,
+    this.isElective = false,
+  });
 
   factory AssignOption.fromMap(Map<String, dynamic> map) {
     return AssignOption(
@@ -52,6 +60,8 @@ class AssignOption {
       // Handle various name keys from different APIs
       name: map['name'] ?? map['subject_name'] ?? map['year_name'] ?? map['sem_number']?.toString() ?? '',
       code: map['code'] ?? map['subject_code'],
+      departmentName: map['department_name'] ?? map['department']?.toString(),
+      isElective: map['is_elective'] == true,
     );
   }
 }

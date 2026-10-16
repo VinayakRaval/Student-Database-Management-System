@@ -8,7 +8,8 @@ class Subject(models.Model):
     department = models.ForeignKey(Department, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
     subject_name = models.CharField(max_length=200)
-    subject_code = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    subject_code = models.CharField(max_length=50, null=True, blank=True)
+    is_elective = models.BooleanField(default=False)
 
 
     def __str__(self):
@@ -18,6 +19,7 @@ class Subject(models.Model):
 
     class Meta:
         db_table = 'subject'
+        unique_together = ('department', 'semester', 'subject_code')
 class SubjectAssignment(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     faculty = models.ForeignKey(Faculty, on_delete=models.CASCADE)

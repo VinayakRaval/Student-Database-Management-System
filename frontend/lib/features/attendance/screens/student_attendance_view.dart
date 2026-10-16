@@ -35,9 +35,11 @@ class StudentAttendanceView extends ConsumerWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("My Attendance"),
+        centerTitle: true,
+        title: const Text("My Attendance", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
         backgroundColor: const Color(0xFF13246E),
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

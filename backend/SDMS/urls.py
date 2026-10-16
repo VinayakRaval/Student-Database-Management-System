@@ -10,6 +10,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('userlogin/', include('userlogin.urls')),
+    path('auth/', include('userlogin.urls')),
+    path('api/auth/', include('userlogin.urls')),
     path('academics/', include('academics.urls')),
     path('faculty/', include('faculty.urls')),
     path('students/', include('students.urls')),
@@ -23,6 +25,7 @@ urlpatterns = [
     path('library/', include('library.urls')),
     path('grievances/', include('grievances.urls')),
     path('external_results/', include('external_results.urls')),
+    path('announcements/', include('announcements.urls')),
     path('', lambda request: HttpResponse(
         "<h1>Student Data Management System</h1>"
         "<p>Backend is running successfully.</p>"

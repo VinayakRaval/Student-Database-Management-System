@@ -82,7 +82,11 @@ class _IAMarksScreenState extends ConsumerState<IAMarksScreen> {
         String msg = "Could not load students for this subject.";
         if (e is DioException) {
           final data = e.response?.data;
-          if (data is Map && data['error'] != null) {
+          if (e.response?.statusCode == 403) {
+            msg = data is Map && data['error'] != null
+                ? data['error'].toString()
+                : "Permission Denied: Only the faculty member assigned to teach this subject can enter or update IA marks.";
+          } else if (data is Map && data['error'] != null) {
             msg = data['error'].toString();
           } else if (e.response?.statusCode == 404) {
             msg = "No enrolled students found for this subject.";
@@ -162,8 +166,27 @@ class _IAMarksScreenState extends ConsumerState<IAMarksScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
+        String msg = "Submission failed. Please check inputs and try again.";
+        if (e is DioException && e.response?.data != null) {
+          final data = e.response!.data;
+          if (data is Map) {
+            if (data['error'] != null) {
+              msg = data['error'].toString();
+            } else if (data['detail'] != null) {
+              msg = data['detail'].toString();
+            } else if (data['non_field_errors'] != null) {
+              msg = (data['non_field_errors'] is List)
+                  ? (data['non_field_errors'] as List).join(", ")
+                  : data['non_field_errors'].toString();
+            } else {
+              msg = data.values.map((v) => v is List ? v.join(", ") : v.toString()).join("; ");
+            }
+          } else if (data is String && data.isNotEmpty) {
+            msg = data;
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Submission failed: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
       }
     }

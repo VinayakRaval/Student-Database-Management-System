@@ -4,9 +4,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import CustomUser, PasswordResetOTP
+from .models import CustomUser, PasswordResetOTP, AccountInvitation, RegistrationOTP
 from .serializers import UserSerializer
 from .utils import generate_otp, get_user_by_identifier, send_otp_email
+from .email_service import (
+    send_password_setup_invitation,
+    send_password_changed_notification,
+    send_registration_otp,
+)
 from django.utils import timezone
 from datetime import timedelta
 
@@ -303,8 +308,18 @@ class LoginView(APIView):
             return Response({"error": "Identifier and password required"}, status=status.HTTP_400_BAD_REQUEST)
 
         user = get_user_by_identifier(identifier)
-        if not user or not user.check_password(password):
-            logger.warning(f"Failed login attempt: {identifier}")
+        if not user:
+            logger.warning(f"Failed login attempt - user not found: {identifier}")
+            return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.is_active:
+            logger.warning(f"Inactive user login attempt: {identifier}")
+            return Response({
+                "error": "This account is not yet active. Please complete your password setup using the link sent to your registered email, or contact your department administrator."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if not user.check_password(password):
+            logger.warning(f"Failed login attempt - wrong password: {identifier}")
             return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
 
         sync_user_associations(user)
@@ -435,3 +450,244 @@ class PasswordResetVerifyView(APIView):
         otp_obj.delete()
 
         return Response({"message": "Password reset successful"}, status=status.HTTP_200_OK)
+
+
+class PasswordSetupVerifyTokenView(APIView):
+    """
+    Public endpoint: verifies token validity when student/faculty opens the invitation link.
+    Returns recipient metadata (Name, Email, Role, Department) so the UI can greet them.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token") or request.query_params.get("token")
+        if not token:
+            return Response({"valid": False, "detail": "Token parameter is missing."}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_valid, invitation, error_msg = AccountInvitation.verify_token(token)
+        if not is_valid:
+            return Response({"valid": False, "detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = invitation.user
+        return Response({
+            "valid": True,
+            "invitation_type": invitation.invitation_type,
+            "expires_at": invitation.expires_at.isoformat(),
+            "user": {
+                "name": user.get_full_name(),
+                "email": user.email,
+                "role": user.role,
+                "user_id": user.user_id,
+                "usn": user.usn,
+                "department": user.department.name if user.department else None,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class PasswordSetupConfirmView(APIView):
+    """
+    Public endpoint: sets the user's permanent password using the verified one-time token.
+    Enforces password complexity, activates user, clears force_password_change,
+    marks invitation ACCEPTED, sends confirmation email, and returns JWT auth tokens.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        password = request.data.get("password")
+        confirm_password = request.data.get("confirm_password")
+
+        if not token or not password:
+            return Response({"error": "Token and new password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if confirm_password and password != confirm_password:
+            return Response({"error": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate password strength
+        if len(password) < 8:
+            return Response({"error": "Password must be at least 8 characters long."}, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r"[A-Z]", password):
+            return Response({"error": "Password must contain at least one uppercase letter (A-Z)."}, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r"[a-z]", password):
+            return Response({"error": "Password must contain at least one lowercase letter (a-z)."}, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r"\d", password):
+            return Response({"error": "Password must contain at least one numeric digit (0-9)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_valid, invitation, error_msg = AccountInvitation.verify_token(token)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = invitation.user
+        invitation.accept(password)
+        sync_user_associations(user)
+        user.refresh_from_db()
+
+        # Asynchronously send password update confirmation email
+        send_password_changed_notification(user)
+
+        # Generate JWT tokens so user is immediately logged in
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "message": "Password setup successful! Your account is now active.",
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "role": user.role,
+            "force_password_change": False,
+            "user": UserSerializer(user).data
+        }, status=status.HTTP_200_OK)
+
+
+class ResendInvitationView(APIView):
+    """
+    Authorized endpoint: allows HOD, Principal, or Admin to resend a setup invitation email.
+    HOD can only resend invitations for users within their department.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        caller = request.user
+        caller_role = (getattr(caller, 'role', '') or '').upper()
+        is_admin = caller.is_staff or caller_role in ['PRINCIPAL', 'SYSTEM']
+        is_hod = caller_role == 'HOD'
+
+        if not (is_admin or is_hod):
+            return Response({"error": "Only HOD, Principal, or Administrators can resend account invitations."}, status=status.HTTP_403_FORBIDDEN)
+
+        user_target = None
+        user_id_param = request.data.get("user_id")
+        email_param = request.data.get("email")
+        student_id_param = request.data.get("student_id")
+        faculty_id_param = request.data.get("faculty_id")
+
+        if user_id_param:
+            user_target = CustomUser.objects.filter(id=user_id_param).first()
+        elif email_param:
+            user_target = CustomUser.objects.filter(email__iexact=email_param.strip()).first()
+        elif student_id_param:
+            from students.models import Student
+            st = Student.objects.filter(id=student_id_param).select_related('user').first()
+            if st and st.user:
+                user_target = st.user
+        elif faculty_id_param:
+            from faculty.models import Faculty
+            fc = Faculty.objects.filter(id=faculty_id_param).select_related('user').first()
+            if fc and fc.user:
+                user_target = fc.user
+
+        if not user_target:
+            return Response({"error": "Target user could not be found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Department scoping for HOD
+        if is_hod and not is_admin:
+            from timetable.views import _resolve_department_for_user
+            caller_dept = _resolve_department_for_user(caller)
+            target_dept = getattr(user_target, 'department', None)
+            if not caller_dept or target_dept != caller_dept:
+                return Response({"error": "HOD can only resend invitations for members of their own department."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Create invitation & send email asynchronously
+        invitation, raw_token = AccountInvitation.create_invitation(
+            user=user_target,
+            created_by=caller,
+            invitation_type=AccountInvitation.TYPE_INITIAL_SETUP,
+            expiry_hours=24
+        )
+
+        send_password_setup_invitation(
+            user=user_target,
+            raw_token=raw_token,
+            recipient_name=user_target.get_full_name(),
+            id_value=user_target.usn or user_target.user_id,
+            role=user_target.role,
+            invitation_type=AccountInvitation.TYPE_INITIAL_SETUP,
+            expiry_hours=24
+        )
+
+        return Response({
+            "message": f"Password setup invitation sent successfully to {user_target.email}.",
+            "expires_at": invitation.expires_at.isoformat(),
+            "status": invitation.status
+        }, status=status.HTTP_200_OK)
+
+
+class RegistrationSendOTPView(APIView):
+    """
+    Public endpoint: generates and sends a 6-digit verification OTP to a prospective student's email.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email or not str(email).strip():
+            return Response({"error": "Email address is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = str(email).strip().lower()
+
+        # Check if email is already taken by an active student/user
+        if CustomUser.objects.filter(email__iexact=email).exists():
+            return Response(
+                {"error": "An account with this email address already exists. Please log in or use password recovery."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Generate 6-digit numeric OTP
+        import secrets
+        otp = f"{secrets.randbelow(900000) + 100000}"
+
+        # Delete older unverified registration OTPs for this email to prevent accumulation
+        RegistrationOTP.objects.filter(email__iexact=email, is_verified=False).delete()
+
+        RegistrationOTP.objects.create(
+            email=email,
+            otp=otp,
+            is_verified=False
+        )
+
+        # Dispatch async email & console print
+        send_registration_otp(email, otp)
+
+        return Response({
+            "message": f"Verification code sent to {email}.",
+            "email": email
+        }, status=status.HTTP_200_OK)
+
+
+class RegistrationVerifyOTPView(APIView):
+    """
+    Public endpoint: verifies the 6-digit OTP entered by the prospective student.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+
+        if not email or not str(email).strip():
+            return Response({"error": "Email address is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not otp or not str(otp).strip():
+            return Response({"error": "OTP verification code is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = str(email).strip().lower()
+        otp = str(otp).strip()
+
+        # Fetch latest OTP record for this email
+        otp_record = RegistrationOTP.objects.filter(email__iexact=email).order_by("-created_at").first()
+
+        if not otp_record:
+            return Response({"error": "No verification code was requested for this email. Please click Send OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_record.is_expired():
+            return Response({"error": "Verification code has expired. Please request a new OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_record.otp != otp:
+            return Response({"error": "Invalid verification code. Please check and try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp_record.is_verified = True
+        otp_record.save(update_fields=["is_verified"])
+
+        return Response({
+            "message": "Email address verified successfully!",
+            "email": email,
+            "verified": True
+        }, status=status.HTTP_200_OK)
+

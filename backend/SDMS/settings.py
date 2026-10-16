@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "library",
     "grievances",
     "external_results",
+    "announcements",
 
     # Third-party apps
     "rest_framework",
@@ -130,12 +131,17 @@ MEDIA_ROOT = BASE_DIR / "media"
 # ---------------------------------------------------------------------
 AUTH_USER_MODEL = "userlogin.CustomUser"
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "spdarshan252@gmail.com"
-EMAIL_HOST_PASSWORD = "aivf wnem rbob snjc"  # Use env var in production
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in ["true", "1", "yes"]
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "spdarshan252@gmail.com")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "aivf wnem rbob snjc")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", f"Government Engineering College <{EMAIL_HOST_USER}>")
+EMAIL_TIMEOUT = 10  # 10s socket timeout to prevent blocking worker threads
+
+# Frontend Portal URL for Password Setup / Activation Links
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # ---------------------------------------------------------------------
 # REST FRAMEWORK (JWT FIXED)

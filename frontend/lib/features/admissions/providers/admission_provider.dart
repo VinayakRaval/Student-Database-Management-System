@@ -8,7 +8,7 @@ Dio get _publicDio => ApiClient().dio;
 
 // --- DROPDOWN PROVIDERS ---
 final departmentsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
       final response = await _publicDio.get('/academics/departments/');
       final data = response.data;
       final list = data is List ? data : data['results'] ?? [];
@@ -16,7 +16,7 @@ final departmentsProvider =
     });
 
 final academicYearsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
       final response = await _publicDio.get('/academics/academic-years/');
       final data = response.data;
       final list = data is List ? data : data['results'] ?? [];
@@ -24,7 +24,7 @@ final academicYearsProvider =
     });
 
 final semestersProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
       final response = await _publicDio.get('/academics/semesters/');
       final data = response.data;
       final list = data is List ? data : data['results'] ?? [];
@@ -116,25 +116,31 @@ class AdmissionNotifier extends StateNotifier<AdmissionState> {
         }, orElse: () => null);
 
         if (matchingStructure != null) {
-          state = state.copyWith(
-            fetchedFeeStructureId: matchingStructure['id'],
-            fetchedFeeAmount:
-                double.tryParse(matchingStructure['total_amount'].toString()) ??
-                0.0,
-          );
+          if (mounted) {
+            state = state.copyWith(
+              fetchedFeeStructureId: matchingStructure['id'],
+              fetchedFeeAmount:
+                  double.tryParse(matchingStructure['total_amount'].toString()) ??
+                  0.0,
+            );
+          }
           return;
         }
       }
 
-      state = state.copyWith(
-        fetchedFeeStructureId: null,
-        fetchedFeeAmount: null,
-      );
+      if (mounted) {
+        state = state.copyWith(
+          fetchedFeeStructureId: null,
+          fetchedFeeAmount: null,
+        );
+      }
     } catch (e) {
-      state = state.copyWith(
-        fetchedFeeStructureId: null,
-        fetchedFeeAmount: null,
-      );
+      if (mounted) {
+        state = state.copyWith(
+          fetchedFeeStructureId: null,
+          fetchedFeeAmount: null,
+        );
+      }
     }
   }
 
@@ -142,7 +148,9 @@ class AdmissionNotifier extends StateNotifier<AdmissionState> {
     Map<String, dynamic> formMap, {
     required Map<String, Uint8List?> attachments,
   }) async {
-    state = state.copyWith(isLoading: true);
+    if (mounted) {
+      state = state.copyWith(isLoading: true, errorMessage: null, successMessage: null);
+    }
     final dio = _publicDio;
 
     try {
@@ -151,18 +159,24 @@ class AdmissionNotifier extends StateNotifier<AdmissionState> {
         formMap["address"] = formMap["permanent_address"] ?? "";
       }
 
-      attachments.forEach((key, bytes) {
-        if (bytes != null) {
-          formMap[key] = MultipartFile.fromBytes(bytes, filename: "$key.png");
+      final cleanedFormMap = <String, dynamic>{};
+      formMap.forEach((key, value) {
+        if (value != null) {
+          cleanedFormMap[key] = value;
         }
       });
 
-      final formData = FormData.fromMap(formMap);
+      attachments.forEach((key, bytes) {
+        if (bytes != null && bytes.isNotEmpty) {
+          cleanedFormMap[key] = MultipartFile.fromBytes(bytes, filename: "$key.png");
+        }
+      });
+
+      final formData = FormData.fromMap(cleanedFormMap);
 
       final response = await dio.post(
         '/students/create/',
         data: formData,
-        options: Options(headers: {"Content-Type": "multipart/form-data"}),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -188,30 +202,55 @@ class AdmissionNotifier extends StateNotifier<AdmissionState> {
           }
         }
 
-        state = state.copyWith(
-          isLoading: false,
-          successMessage: "Registration Successful",
-        );
+        if (mounted) {
+          state = state.copyWith(
+            isLoading: false,
+            successMessage: "Registration Successful",
+          );
+        }
         return studentId;
       }
 
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: "Registration Failed: ${response.statusCode}",
-      );
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: "Registration Failed: ${response.statusCode}",
+        );
+      }
       return null;
     } catch (e) {
-      String msg = e.toString();
+      String msg = "Registration failed. Please check the entered details.";
       if (e is DioException) {
-        msg = e.response?.data.toString() ?? msg;
+        final data = e.response?.data;
+        if (data is Map) {
+          final List<String> errorParts = [];
+          data.forEach((k, v) {
+            if (v is List) {
+              errorParts.add("$k: ${v.join(', ')}");
+            } else {
+              errorParts.add("$k: $v");
+            }
+          });
+          if (errorParts.isNotEmpty) {
+            msg = errorParts.join('\n');
+          }
+        } else if (data is String && data.isNotEmpty) {
+          msg = data;
+        } else if (e.message != null) {
+          msg = e.message!;
+        }
+      } else {
+        msg = e.toString();
       }
-      state = state.copyWith(isLoading: false, errorMessage: msg);
+      if (mounted) {
+        state = state.copyWith(isLoading: false, errorMessage: msg);
+      }
       return null;
     }
   }
 }
 
 final admissionProvider =
-    StateNotifierProvider.autoDispose<AdmissionNotifier, AdmissionState>((ref) {
+    StateNotifierProvider<AdmissionNotifier, AdmissionState>((ref) {
       return AdmissionNotifier();
     });

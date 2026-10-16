@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
 import 'package:frontend/features/auth/screens/forgot_password_page.dart';
-import 'package:frontend/core/constants/api_constants.dart';
 import 'package:go_router/go_router.dart';
 
 class LoginPage extends StatefulWidget {
@@ -70,7 +69,13 @@ class _LoginPageState extends State<LoginPage> {
                   Align(
                     alignment: Alignment.topLeft,
                     child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        if (context.canPop()) {
+                          context.pop();
+                        } else {
+                          context.go('/');
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,

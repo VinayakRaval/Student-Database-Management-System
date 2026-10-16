@@ -67,6 +67,7 @@ class Faculty(models.Model):
     )
 
     photo = models.ImageField(upload_to="photos/", null=True, blank=True)
+    signature = models.ImageField(upload_to="faculty_signatures/", null=True, blank=True)
 
     status = models.CharField(
         max_length=20,

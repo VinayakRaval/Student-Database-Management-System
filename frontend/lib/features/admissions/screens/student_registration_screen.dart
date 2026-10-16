@@ -94,6 +94,7 @@ class _StudentRegistrationScreenState
   int? _selectedDeptId;
   int? _selectedSemId;
   int? _selectedYearId;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -144,7 +145,94 @@ class _StudentRegistrationScreenState
     super.dispose();
   }
 
+  void _goToPage(int page) {
+    if (page >= 0 && page <= 2) {
+      _pageController.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() => _currentPage = page);
+    }
+  }
+
   void _nextPage() {
+    if (_currentPage == 0) {
+      if (_nameCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter Student Name"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_cetNoCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter CET / Reg No"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_dobCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select Date of Birth"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_fatherCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter Father's Name"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_motherCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter Mother's Name"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_phoneCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter Mobile Number"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_emailCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter Email Address"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    } else if (_currentPage == 1) {
+      if (_permAddrCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter Permanent Address"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedDeptId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select Department"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedSemId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select Semester"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedYearId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select Academic Year"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedSeatType == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select Seat Type"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
     if (_currentPage < 2) {
       _pageController.animateToPage(
         _currentPage + 1,
@@ -195,15 +283,17 @@ class _StudentRegistrationScreenState
       final dio = ApiClient().dio;
       await dio.post('/userlogin/register/send-otp/', data: {'email': email});
       setState(() => _otpSent = true);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("OTP sent to $email")));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Failed: $e")));
+      }
     }
     setState(() => _sendingOtp = false);
   }
@@ -224,132 +314,274 @@ class _StudentRegistrationScreenState
         data: {'email': email, 'otp': otp},
       );
       setState(() => _otpVerified = true);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Email verified!")));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Invalid OTP")));
+      }
     }
   }
 
   void _submit() async {
-    if (_selectedDeptId == null ||
-        _selectedSemId == null ||
-        _selectedYearId == null) {
+    if (_isSubmitting) return;
+
+    // 1. Personal details validation (Page 1)
+    if (_nameCtrl.text.trim().isEmpty) {
+      _goToPage(0);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select academic details")),
+        const SnackBar(content: Text("Please enter Student Name"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_cetNoCtrl.text.trim().isEmpty) {
+      _goToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter CET / Reg No"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_dobCtrl.text.trim().isEmpty) {
+      _goToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select Date of Birth"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_fatherCtrl.text.trim().isEmpty) {
+      _goToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Father's Name"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_motherCtrl.text.trim().isEmpty) {
+      _goToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Mother's Name"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_phoneCtrl.text.trim().isEmpty) {
+      _goToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Mobile Number"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_emailCtrl.text.trim().isEmpty) {
+      _goToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Email Address"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // 2. Communication & Academic details validation (Page 2)
+    if (_permAddrCtrl.text.trim().isEmpty) {
+      _goToPage(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Permanent Address"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_selectedDeptId == null) {
+      _goToPage(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select Department"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_selectedSemId == null) {
+      _goToPage(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select Semester"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_selectedYearId == null) {
+      _goToPage(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select Academic Year"), backgroundColor: Colors.red),
       );
       return;
     }
     if (_selectedSeatType == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please select Seat Type")));
+      _goToPage(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select Seat Type"), backgroundColor: Colors.red),
+      );
       return;
     }
-    final formMap = {
-      "name": _nameCtrl.text,
-      "cet_no": _cetNoCtrl.text.isEmpty ? null : _cetNoCtrl.text,
-      "dob": _dobCtrl.text,
-      "gender": _genderCtrl.text.isEmpty ? "male" : _genderCtrl.text,
-      "religion": _religionCtrl.text,
-      "nationality": _nationalityCtrl.text,
-      "state": _stateCtrl.text.isEmpty ? "N/A" : _stateCtrl.text,
-      "city_type": _cityTypeCtrl.text,
-      "mobile_no": _phoneCtrl.text,
-      "email": _emailCtrl.text,
-      "father_name": _fatherCtrl.text,
-      "mother_name": _motherCtrl.text,
-      "parent_occupation": _parentOccCtrl.text.isEmpty
-          ? null
-          : _parentOccCtrl.text,
-      "address": _permAddrCtrl.text,
-      "permanent_address": _permAddrCtrl.text,
-      "admission_quota": _quotaCtrl.text,
-      "seat_type": _selectedSeatType ?? "general_merit",
-      "rank": _rankCtrl.text.isEmpty ? null : _rankCtrl.text,
-      "date_of_admission": _admDateCtrl.text,
-      "caste": _casteCtrl.text.trim().isEmpty ? null : _casteCtrl.text.trim(),
-      "other_reservation": _otherResCtrl.text.trim().isEmpty
-          ? null
-          : _otherResCtrl.text.trim(),
-      "sslc_regno": _sslcRegCtrl.text,
-      "sslc_year": _sslcYearCtrl.text,
-      "sslc_obtain_marks": _sslcObtCtrl.text.isEmpty
-          ? null
-          : int.parse(_sslcObtCtrl.text),
-      "sslc_total_marks": _sslcMaxCtrl.text.isEmpty
-          ? null
-          : int.parse(_sslcMaxCtrl.text),
-      "puc_regno": _pucRegCtrl.text,
-      "puc_year": _pucYearCtrl.text,
-      "puc_obtain_marks": _pucObtCtrl.text.isEmpty
-          ? null
-          : int.parse(_pucObtCtrl.text),
-      "puc_total_marks": _pucMaxCtrl.text.isEmpty
-          ? null
-          : int.parse(_pucMaxCtrl.text),
-      "diploma_regno": _dipRegCtrl.text,
-      "diploma_year": _dipYearCtrl.text,
-      "diploma_obtain_marks": _dipObtCtrl.text.isEmpty
-          ? null
-          : int.parse(_dipObtCtrl.text),
-      "diploma_total_marks": _dipMaxCtrl.text.isEmpty
-          ? null
-          : int.parse(_dipMaxCtrl.text),
-      "department_id": _selectedDeptId,
-      "semester_id": _selectedSemId,
-      "academic_year_id": _selectedYearId,
-    };
-    final attachments = <String, Uint8List?>{
-      "photo": studentPhoto,
-      "signature": studentSignature,
-      "sslc_marksheet": sslcMarksheet,
-      "puc_marksheet": pucMarksheet,
-      "diploma_marksheet": diplomaMarksheet,
-      "kannada_medium_certificate": kannadaCertificate,
-      "hyderabad_karnataka_certificate": hkCertificate,
-      "caste_certificate": casteCertificate,
-      "kea_acknowledgement": keaAcknowledgement,
-      "study_certificate": studyCertificate,
-    };
-    final success = await ref
-        .read(admissionProvider.notifier)
-        .registerStudentFromMap(formMap, attachments: attachments);
-    if (!mounted) return; // Add this line
-    if (success != null) {
-      final auth = p.Provider.of<AuthProvider>(context, listen: false);
-      if (auth.isLoggedIn) {
-        context.go('/admissions/list');
-      } else {
-        context.go('/login');
-      }
+
+    // 3. Education details validation (Page 3)
+    final hasDiploma = _dipRegCtrl.text.trim().isNotEmpty || _dipObtCtrl.text.trim().isNotEmpty;
+    final hasSslc = _sslcRegCtrl.text.trim().isNotEmpty || _sslcObtCtrl.text.trim().isNotEmpty;
+    final hasPuc = _pucRegCtrl.text.trim().isNotEmpty || _pucObtCtrl.text.trim().isNotEmpty;
+
+    if (!hasDiploma && !hasSslc && !hasPuc) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Student Registration Successful!"),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      final error = ref
-          .read(admissionProvider)
-          .errorMessage;
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error ?? "Registration Failed"),
+          content: Text("Please enter education qualification details (10th, PUC, or Diploma)"),
           backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    // 4. Documents validation
+    if (studentPhoto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please upload Student Photo"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (studentSignature == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please upload Student Signature"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // 5. Safe mark parsing
+    final sslcObt = int.tryParse(_sslcObtCtrl.text.trim());
+    final sslcMax = int.tryParse(_sslcMaxCtrl.text.trim());
+    final pucObt = int.tryParse(_pucObtCtrl.text.trim());
+    final pucMax = int.tryParse(_pucMaxCtrl.text.trim());
+    final dipObt = int.tryParse(_dipObtCtrl.text.trim());
+    final dipMax = int.tryParse(_dipMaxCtrl.text.trim());
+
+    if (sslcObt != null && sslcMax != null && sslcObt > sslcMax) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("10th obtained marks cannot exceed maximum marks"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (pucObt != null && pucMax != null && pucObt > pucMax) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("PUC obtained marks cannot exceed maximum marks"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (dipObt != null && dipMax != null && dipObt > dipMax) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Diploma obtained marks cannot exceed maximum marks"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final formMap = <String, dynamic>{
+        "name": _nameCtrl.text.trim(),
+        "cet_no": _cetNoCtrl.text.trim().isEmpty ? null : _cetNoCtrl.text.trim(),
+        "dob": _dobCtrl.text.trim(),
+        "gender": _genderCtrl.text.trim().isEmpty ? "male" : _genderCtrl.text.trim(),
+        "religion": _religionCtrl.text.trim().isEmpty ? "General" : _religionCtrl.text.trim(),
+        "nationality": _nationalityCtrl.text.trim().isEmpty ? "Indian" : _nationalityCtrl.text.trim(),
+        "state": _stateCtrl.text.trim().isEmpty ? "Karnataka" : _stateCtrl.text.trim(),
+        "city_type": _cityTypeCtrl.text.trim().isEmpty ? "urban" : _cityTypeCtrl.text.trim(),
+        "mobile_no": _phoneCtrl.text.trim(),
+        "email": _emailCtrl.text.trim(),
+        "father_name": _fatherCtrl.text.trim().isEmpty ? null : _fatherCtrl.text.trim(),
+        "mother_name": _motherCtrl.text.trim().isEmpty ? null : _motherCtrl.text.trim(),
+        "parent_occupation": _parentOccCtrl.text.trim().isEmpty ? "Self-employed" : _parentOccCtrl.text.trim(),
+        "address": _AddrCtrl.text.trim().isEmpty ? _permAddrCtrl.text.trim() : _AddrCtrl.text.trim(),
+        "permanent_address": _permAddrCtrl.text.trim(),
+        "admission_quota": _quotaCtrl.text.trim().isEmpty ? "CET" : _quotaCtrl.text.trim(),
+        "seat_type": _selectedSeatType ?? "general_merit",
+        "rank": _rankCtrl.text.trim().isEmpty ? null : _rankCtrl.text.trim(),
+        "date_of_admission": _admDateCtrl.text.trim().isEmpty
+            ? DateFormat('yyyy-MM-dd').format(DateTime.now())
+            : _admDateCtrl.text.trim(),
+        "caste": _casteCtrl.text.trim().isEmpty ? null : _casteCtrl.text.trim(),
+        "other_reservation": _otherResCtrl.text.trim().isEmpty ? null : _otherResCtrl.text.trim(),
+        "sslc_regno": _sslcRegCtrl.text.trim().isEmpty ? null : _sslcRegCtrl.text.trim(),
+        "sslc_year": _sslcYearCtrl.text.trim().isEmpty ? null : _sslcYearCtrl.text.trim(),
+        "sslc_obtain_marks": sslcObt,
+        "sslc_total_marks": sslcMax,
+        "puc_regno": _pucRegCtrl.text.trim().isEmpty ? null : _pucRegCtrl.text.trim(),
+        "puc_year": _pucYearCtrl.text.trim().isEmpty ? null : _pucYearCtrl.text.trim(),
+        "puc_obtain_marks": pucObt,
+        "puc_total_marks": pucMax,
+        "diploma_regno": _dipRegCtrl.text.trim().isEmpty ? null : _dipRegCtrl.text.trim(),
+        "diploma_year": _dipYearCtrl.text.trim().isEmpty ? null : _dipYearCtrl.text.trim(),
+        "diploma_obtain_marks": dipObt,
+        "diploma_total_marks": dipMax,
+        "department_id": _selectedDeptId,
+        "semester_id": _selectedSemId,
+        "academic_year_id": _selectedYearId,
+      };
+
+      final attachments = <String, Uint8List?>{
+        "photo": studentPhoto,
+        "signature": studentSignature,
+        "sslc_marksheet": sslcMarksheet,
+        "puc_marksheet": pucMarksheet,
+        "diploma_marksheet": diplomaMarksheet,
+        "kannada_medium_certificate": kannadaCertificate,
+        "hyderabad_karnataka_certificate": hkCertificate,
+        "caste_certificate": casteCertificate,
+        "kea_acknowledgement": keaAcknowledgement,
+        "study_certificate": studyCertificate,
+      };
+
+      final success = await ref
+          .read(admissionProvider.notifier)
+          .registerStudentFromMap(formMap, attachments: attachments);
+
+      if (!mounted) return;
+
+      if (success != null) {
+        final auth = p.Provider.of<AuthProvider>(context, listen: false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Student Registration Successful! Password invitation dispatched to ${_emailCtrl.text.trim()}."),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        if (auth.isLoggedIn) {
+          context.go('/admissions/list');
+        } else {
+          context.go('/login');
+        }
+      } else {
+        final error = ref.read(admissionProvider).errorMessage;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error ?? "Registration Failed"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error during registration: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(admissionProvider);
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -428,11 +660,12 @@ class _StudentRegistrationScreenState
                     Expanded(
                       child: Column(
                         children: [
-                          _buildLabelRow("Name", _nameCtrl),
-                          _buildLabelRow("CET No", _cetNoCtrl),
+                          _buildLabelRow("Name", _nameCtrl, isRequired: true),
+                          _buildLabelRow("CET No", _cetNoCtrl, isRequired: true),
                           _buildDropdownRow(
                             label: "Gender",
                             value: _genderCtrl.text,
+                            isRequired: true,
                             items: const {
                               "male": "Male",
                               "female": "Female",
@@ -444,12 +677,13 @@ class _StudentRegistrationScreenState
                           _buildDateRow(
                             label: "Date of Birth",
                             controller: _dobCtrl,
+                            isRequired: true,
                           ),
-                          _buildLabelRow("Father's Name", _fatherCtrl),
-                          _buildLabelRow("Mother's Name", _motherCtrl),
-                          _buildLabelRow("Parent Occupation", _parentOccCtrl),
-                          _buildLabelRow("Phone", _phoneCtrl),
-                          _buildLabelRow("Email-ID", _emailCtrl),
+                          _buildLabelRow("Father's Name", _fatherCtrl, isRequired: true),
+                          _buildLabelRow("Mother's Name", _motherCtrl, isRequired: true),
+                          _buildLabelRow("Parent Occupation", _parentOccCtrl, isRequired: true),
+                          _buildLabelRow("Phone", _phoneCtrl, isRequired: true),
+                          _buildLabelRow("Email-ID", _emailCtrl, isRequired: true),
                           if (!_otpVerified)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -553,6 +787,7 @@ class _StudentRegistrationScreenState
                           _buildDropdownRow(
                             label: "City Type",
                             value: _cityTypeCtrl.text,
+                            isRequired: true,
                             items: const {"rural": "Rural", "urban": "Urban"},
                             onChanged: (v) =>
                                 setState(() => _cityTypeCtrl.text = v),
@@ -564,9 +799,9 @@ class _StudentRegistrationScreenState
                     Expanded(
                       child: Column(
                         children: [
-                          _buildLabelRow("Religion", _religionCtrl),
-                          _buildLabelRow("Nationality", _nationalityCtrl),
-                          _buildLabelRow("State", _stateCtrl),
+                          _buildLabelRow("Religion", _religionCtrl, isRequired: true),
+                          _buildLabelRow("Nationality", _nationalityCtrl, isRequired: true),
+                          _buildLabelRow("State", _stateCtrl, isRequired: true),
                           _buildLabelRow("Caste", _casteCtrl),
                           _buildLabelRow("Other Reservation", _otherResCtrl),
                         ],
@@ -596,6 +831,7 @@ class _StudentRegistrationScreenState
     required String value,
     required Map<String, String> items,
     required Function(String) onChanged,
+    bool isRequired = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -603,9 +839,26 @@ class _StudentRegistrationScreenState
         children: [
           SizedBox(
             width: 140,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            child: RichText(
+              text: TextSpan(
+                text: label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+                children: isRequired
+                    ? [
+                        const TextSpan(
+                          text: " *",
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ]
+                    : [],
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -642,6 +895,7 @@ class _StudentRegistrationScreenState
   Widget _buildDateRow({
     required String label,
     required TextEditingController controller,
+    bool isRequired = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -649,9 +903,26 @@ class _StudentRegistrationScreenState
         children: [
           SizedBox(
             width: 140,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            child: RichText(
+              text: TextSpan(
+                text: label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+                children: isRequired
+                    ? [
+                        const TextSpan(
+                          text: " *",
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ]
+                    : [],
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -695,7 +966,7 @@ class _StudentRegistrationScreenState
           child: SingleChildScrollView(
             child: Column(
               children: [
-                _buildLabelRow("Permanent Address", _permAddrCtrl),
+                _buildLabelRow("Permanent Address", _permAddrCtrl, isRequired: true),
                 _buildLabelRow("Correspondent Address", _AddrCtrl),
                 const Divider(thickness: 1, color: Colors.grey, height: 30),
                 const SizedBox(height: 20),
@@ -718,12 +989,13 @@ class _StudentRegistrationScreenState
                     Expanded(
                       child: Column(
                         children: [
-                          _buildLabelRow("Admission Quota", _quotaCtrl),
+                          _buildLabelRow("Admission Quota", _quotaCtrl, isRequired: true),
                           _buildLabelRow("Rank", _rankCtrl),
                           _buildLabelRow(
                             "Admission Date",
                             _admDateCtrl,
                             isDate: true,
+                            isRequired: true,
                           ),
                         ],
                       ),
@@ -736,13 +1008,25 @@ class _StudentRegistrationScreenState
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Row(
                               children: [
-                                const SizedBox(
+                                SizedBox(
                                   width: 140,
-                                  child: Text(
-                                    "Seat Type",
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                                  child: RichText(
+                                    text: const TextSpan(
+                                      text: "Seat Type",
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black,
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: " *",
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -817,11 +1101,26 @@ class _StudentRegistrationScreenState
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 140,
-            child: Text(
-              "Department",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            child: RichText(
+              text: const TextSpan(
+                text: "Department",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+                children: [
+                  TextSpan(
+                    text: " *",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -872,11 +1171,26 @@ class _StudentRegistrationScreenState
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 140,
-            child: Text(
-              "Semester",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            child: RichText(
+              text: const TextSpan(
+                text: "Semester",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+                children: [
+                  TextSpan(
+                    text: " *",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -927,11 +1241,26 @@ class _StudentRegistrationScreenState
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 140,
-            child: Text(
-              "Academic Year",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            child: RichText(
+              text: const TextSpan(
+                text: "Academic Year",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+                children: [
+                  TextSpan(
+                    text: " *",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -1045,7 +1374,7 @@ class _StudentRegistrationScreenState
                   runSpacing: 18,
                   children: [
                     PhotoUploadCard(
-                      title: "Upload Photo",
+                      title: "Upload Photo *",
                       initialBytes: studentPhoto,
                       fileName: studentPhotoName,
                       onChanged: (b, n) => setState(() {
@@ -1054,7 +1383,7 @@ class _StudentRegistrationScreenState
                       }),
                     ),
                     PhotoUploadCard(
-                      title: "Upload Signature",
+                      title: "Upload Signature *",
                       initialBytes: studentSignature,
                       fileName: studentSignatureName,
                       onChanged: (b, n) => setState(() {
@@ -1146,8 +1475,35 @@ class _StudentRegistrationScreenState
                     ),
                     const SizedBox(width: 12),
                     SizedBox(
-                      width: 140,
-                      child: CustomButton(text: "Submit", onPressed: _submit),
+                      width: 150,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF13246E),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                "Submit",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                      ),
                     ),
                   ],
                 ),
@@ -1163,6 +1519,7 @@ class _StudentRegistrationScreenState
     String label,
     TextEditingController controller, {
     bool isDate = false,
+    bool isRequired = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1170,9 +1527,26 @@ class _StudentRegistrationScreenState
         children: [
           SizedBox(
             width: 140,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            child: RichText(
+              text: TextSpan(
+                text: label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+                children: isRequired
+                    ? [
+                        const TextSpan(
+                          text: " *",
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ]
+                    : [],
+              ),
             ),
           ),
           const SizedBox(width: 10),

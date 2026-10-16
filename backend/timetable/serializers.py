@@ -26,10 +26,15 @@ class TimeTableSlotSerializer(serializers.ModelSerializer):
         semester = getattr(a, "semester", None) or getattr(subject, "semester", None)
         academic_year = getattr(a, "academic_year", None)
 
+        subject_dept = getattr(subject, "department", None)
+        cohort_dept = getattr(a, "department", None)
+
         return {
             "id": a.id,
             "subject_code": getattr(subject, "subject_code", None),
             "subject_name": getattr(subject, "subject_name", None),
+            "subject_department": getattr(subject_dept, "name", None),
+            "student_department": getattr(cohort_dept, "name", None),
             "faculty_id": getattr(faculty, "id", None),
             "faculty_name": getattr(faculty, "name", "Unknown"), 
             "semester": getattr(semester, "sem_number", None),
@@ -103,12 +108,19 @@ class TimeTableSerializer(serializers.ModelSerializer):
                 except SubjectAssignment.DoesNotExist:
                     raise serializers.ValidationError(f"SubjectAssignment {assign_id} does not exist.")
 
-                sa_dept_id = getattr(sa.department, "id", sa.department_id) or getattr(getattr(sa.subject, "department", None), "id", None)
+                sa_cohort_dept_id = getattr(sa.department, "id", sa.department_id)
+                sa_subject_dept_id = getattr(getattr(sa.subject, "department", None), "id", None)
                 sa_sem_id = getattr(sa.semester, "id", sa.semester_id) or getattr(getattr(sa.subject, "semester", None), "id", None)
                 sa_ay_id = getattr(sa.academic_year, "id", sa.academic_year_id)
 
-                if dept_id and sa_dept_id and sa_dept_id != dept_id:
-                    raise serializers.ValidationError("Assignment department mismatch.")
+                # An assignment is valid for this timetable if the student cohort matches the timetable department,
+                # permitting cross-department subjects where sa.subject.department differs from sa.department.
+                if dept_id:
+                    if sa_cohort_dept_id and sa_cohort_dept_id != dept_id:
+                        raise serializers.ValidationError("Assignment department mismatch: student cohort department does not match timetable department.")
+                    elif not sa_cohort_dept_id and sa_subject_dept_id and sa_subject_dept_id != dept_id:
+                        raise serializers.ValidationError("Assignment department mismatch: subject department does not match timetable department.")
+
                 if sem_id and sa_sem_id and sa_sem_id != sem_id:
                     raise serializers.ValidationError("Assignment semester mismatch.")
                 if ay_id and sa_ay_id and sa_ay_id != ay_id:

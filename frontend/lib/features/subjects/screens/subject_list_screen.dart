@@ -13,6 +13,8 @@ class SubjectSimple {
   final String code;
   final String semester;
   final String? department;
+  final bool isElective;
+  final bool isAssignedToMe;
 
   SubjectSimple({
     required this.id,
@@ -20,6 +22,8 @@ class SubjectSimple {
     required this.code,
     required this.semester,
     this.department,
+    this.isElective = false,
+    this.isAssignedToMe = true,
   });
 
   factory SubjectSimple.fromJson(Map<String, dynamic> json) {
@@ -27,8 +31,10 @@ class SubjectSimple {
       id: json['subject_id'] ?? json['id'] ?? 0,
       name: json['subject_name'] ?? json['name'] ?? 'Unknown Subject',
       code: json['subject_code'] ?? json['code'] ?? '',
-      semester: (json['semester'] ?? json['semester_id'] ?? '').toString(),
+      semester: (json['semester_no'] ?? json['semester'] ?? json['semester_id'] ?? '').toString(),
       department: json['department_name']?.toString() ?? json['department']?.toString(),
+      isElective: json['is_elective'] == true,
+      isAssignedToMe: json['is_assigned_to_me'] != false,
     );
   }
 }
@@ -45,12 +51,47 @@ class _SubjectListScreenState extends ConsumerState<SubjectListScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  String? _selectedSemester;
+  String _typeFilter = 'ALL'; // 'ALL', 'CORE', 'ELECTIVE'
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSubjects();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<String> get _availableSemesters => const ['1', '2', '3', '4', '5', '6', '7', '8'];
+
+  List<SubjectSimple> get _filteredSubjects {
+    return _subjects.where((s) {
+      if (_selectedSemester != null && s.semester != _selectedSemester) {
+        return false;
+      }
+      if (_typeFilter == 'ELECTIVE' && !s.isElective) {
+        return false;
+      }
+      if (_typeFilter == 'CORE' && s.isElective) {
+        return false;
+      }
+      if (_searchQuery.trim().isNotEmpty) {
+        final q = _searchQuery.trim().toLowerCase();
+        final name = s.name.toLowerCase();
+        final code = s.code.toLowerCase();
+        final dept = (s.department ?? '').toLowerCase();
+        return name.contains(q) || code.contains(q) || dept.contains(q);
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _loadSubjects() async {
@@ -182,78 +223,352 @@ class _SubjectListScreenState extends ConsumerState<SubjectListScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _subjects.length,
-      itemBuilder: (context, index) {
-        final subject = _subjects[index];
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFF13246E),
-              foregroundColor: Colors.white,
-              child: Text(
-                subject.semester.isNotEmpty ? "S${subject.semester}" : "S",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+    final filtered = _filteredSubjects;
+    final availableSems = _availableSemesters;
+
+    return Column(
+      children: [
+        // --- SEARCH & SEMESTER FILTER BAR ---
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            children: [
+              // Search input
+              SizedBox(
+                height: 42,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: "Search by subject name, code, or department...",
+                    hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    filled: true,
+                    fillColor: const Color(0xFFF9FAFB),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF13246E)),
+                    ),
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                ),
               ),
-            ),
-            title: Text(
-              subject.name,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(
-                "Code: ${subject.code}${subject.department != null ? ' • Dept: ${subject.department}' : ''}",
-                style: TextStyle(color: Colors.grey[700], fontSize: 13),
+              const SizedBox(height: 10),
+
+              // Filter Controls: Semester Dropdown & Subject Type Filter
+              Row(
+                children: [
+                  // Semester Dropdown Filter
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String?>(
+                        value: _selectedSemester,
+                        icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF13246E)),
+                        style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
+                        hint: const Text("All Semesters", style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500)),
+                        items: [
+                          DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text("All Semesters (${_subjects.length})"),
+                          ),
+                          ...availableSems.map((sem) {
+                            final count = _subjects.where((s) => s.semester == sem).length;
+                            return DropdownMenuItem<String?>(
+                              value: sem,
+                              child: Text("Semester $sem ($count)"),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) => setState(() => _selectedSemester = val),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // Subject Type Filter (All / Core / Elective)
+                  const Text("Type: ", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+                  _buildTypeChip("All", 'ALL'),
+                  const SizedBox(width: 6),
+                  _buildTypeChip("Core", 'CORE'),
+                  const SizedBox(width: 6),
+                  _buildTypeChip("Electives", 'ELECTIVE'),
+                ],
               ),
-            ),
-            trailing: role == AppRoles.professor
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
+            ],
+          ),
+        ),
+
+        // Result count header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Showing ${filtered.length} of ${_subjects.length} subjects",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              if (_selectedSemester != null || _searchQuery.isNotEmpty || _typeFilter != 'ALL')
+                TextButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                      _selectedSemester = null;
+                      _typeFilter = 'ALL';
+                    });
+                  },
+                  child: const Text("Reset Filters",
+                      style:
+                          TextStyle(fontSize: 12, color: Color(0xFF13246E))),
+                ),
+            ],
+          ),
+        ),
+
+        // Subjects List
+        Expanded(
+          child: filtered.isEmpty
+              ? _buildEmptyFilteredView()
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final subject = filtered[index];
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
                           backgroundColor: const Color(0xFF13246E),
                           foregroundColor: Colors.white,
+                          child: Text(
+                            subject.semester.isNotEmpty
+                                ? "S${subject.semester}"
+                                : "S",
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
                         ),
-                        onPressed: () {
-                          context.push(
-                            '/ia/create/${subject.id}',
-                            extra: subject.name,
-                          );
-                        },
-                        child: const Text("IA Marks"),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right, color: Color(0xFF13246E)),
-                        onPressed: () => _showSubjectDetailsModal(context, subject),
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isHodOrAdmin)
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          tooltip: "Delete Subject",
-                          onPressed: () => _confirmDeleteSubject(subject),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                subject.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ),
+                            if (subject.isElective)
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: Colors.purple.shade300),
+                                ),
+                                child: Text(
+                                  "Elective",
+                                  style: TextStyle(
+                                    color: Colors.purple.shade800,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right, color: Color(0xFF13246E)),
-                        onPressed: () => _showSubjectDetailsModal(context, subject),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            "Code: ${subject.code}${subject.department != null ? ' • Dept: ${subject.department}' : ''}",
+                            style: TextStyle(
+                                color: Colors.grey[700], fontSize: 13),
+                          ),
+                        ),
+                        trailing: role == AppRoles.professor
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (subject.isAssignedToMe)
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF13246E),
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                        context.push(
+                                          '/ia/create/${subject.id}',
+                                          extra: subject.name,
+                                        );
+                                      },
+                                      child: const Text("IA Marks"),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        "Not Assigned",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  IconButton(
+                                    icon: const Icon(Icons.chevron_right,
+                                        color: Color(0xFF13246E)),
+                                    onPressed: () =>
+                                        _showSubjectDetailsModal(
+                                            context, subject),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isHodOrAdmin)
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          color: Colors.red),
+                                      tooltip: "Delete Subject",
+                                      onPressed: () =>
+                                          _confirmDeleteSubject(subject),
+                                    ),
+                                  IconButton(
+                                    icon: const Icon(Icons.chevron_right,
+                                        color: Color(0xFF13246E)),
+                                    onPressed: () =>
+                                        _showSubjectDetailsModal(
+                                            context, subject),
+                                  ),
+                                ],
+                              ),
                       ),
-                    ],
-                  ),
-            onTap: () => _showSubjectDetailsModal(context, subject),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTypeChip(String label, String value) {
+    final isSelected = _typeFilter == value;
+    return InkWell(
+      onTap: () => setState(() => _typeFilter = value),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF13246E) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF13246E) : Colors.grey.shade300,
           ),
-        );
-      },
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : const Color(0xFF13246E),
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 11,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyFilteredView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 56, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            const Text(
+              "No subjects found matching your filters",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1F2937),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Try adjusting your search query or choosing a different semester.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.clear, size: 16),
+              label: const Text("Clear Filters"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF13246E),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                _searchController.clear();
+                setState(() {
+                  _searchQuery = '';
+                  _selectedSemester = null;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -532,22 +847,23 @@ class _SubjectDetailsSheetState extends State<_SubjectDetailsSheet> {
                   },
                 ),
               ],
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              if (role != AppRoles.professor || widget.subject.isAssignedToMe)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal[700],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.grade, size: 18),
+                  label: const Text("IA Marks"),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    context.push(
+                      '/ia/create/${widget.subject.id}',
+                      extra: widget.subject.name,
+                    );
+                  },
                 ),
-                icon: const Icon(Icons.grade, size: 18),
-                label: const Text("IA Marks"),
-                onPressed: () {
-                  Navigator.pop(context);
-                  context.push(
-                    '/ia/create/${widget.subject.id}',
-                    extra: widget.subject.name,
-                  );
-                },
-              ),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

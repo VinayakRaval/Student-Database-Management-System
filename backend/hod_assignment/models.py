@@ -20,7 +20,7 @@ class HODAssignment(models.Model):
     end_date = models.DateField(null=True, blank=True)
 
     # Automatically maintain database audit timestamps.
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
     def is_current(self):

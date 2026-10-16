@@ -11,7 +11,7 @@ def generate_otp():
     return "{:06d}".format(random.randint(0, 999999))
 
 def get_user_by_identifier(identifier):
-    """Fetch user by email, phone, user_id, or usn."""
+    """Fetch user by email, phone, user_id, usn, or admission_id."""
     user = None
     if not identifier:
         return None
@@ -28,6 +28,28 @@ def get_user_by_identifier(identifier):
         user = CustomUser.objects.filter(user_id__iexact=identifier).first()
         if not user:
             user = CustomUser.objects.filter(usn__iexact=identifier).first()
+
+    # Fallback to linked Student or Faculty profiles
+    if not user:
+        try:
+            from students.models import Student
+            stu = Student.objects.filter(usn__iexact=identifier).select_related('user').first()
+            if not stu:
+                stu = Student.objects.filter(admission_id__iexact=identifier).select_related('user').first()
+            if stu and stu.user:
+                user = stu.user
+        except Exception:
+            pass
+
+    if not user:
+        try:
+            from faculty.models import Faculty
+            fac = Faculty.objects.filter(faculty_id__iexact=identifier).select_related('user').first()
+            if fac and fac.user:
+                user = fac.user
+        except Exception:
+            pass
+
     return user
 
 

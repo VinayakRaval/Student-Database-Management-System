@@ -64,6 +64,26 @@ class RoleMenus {
             'route': '/attendance/faculty',
           },
           {
+            'title': 'Attendance Monitoring',
+            'icon': Icons.fact_check_rounded,
+            'route': '/attendance/monitoring',
+          },
+          {
+            'title': 'IA Performance',
+            'icon': Icons.insights_rounded,
+            'route': '/ia/performance',
+          },
+          {
+            'title': 'Reports',
+            'icon': Icons.assessment_rounded,
+            'route': '/reports/department',
+          },
+          {
+            'title': 'Announcements',
+            'icon': Icons.campaign_rounded,
+            'route': '/announcements/department',
+          },
+          {
             'title': 'Faculty',
             'icon': Icons.school_rounded,
             'route': '/faculty',
@@ -84,6 +104,11 @@ class RoleMenus {
             'title': 'Students',
             'icon': Icons.people_alt_rounded,
             'route': '/admissions/list',
+          },
+          {
+            'title': 'Library Card Approvals',
+            'icon': Icons.badge_rounded,
+            'route': '/hod/library-cards',
           },
         ]);
         break;
@@ -158,6 +183,11 @@ class RoleMenus {
             'title': 'Register Staff',
             'icon': Icons.person_add,
             'route': '/faculty/register',
+          },
+          {
+            'title': 'Announcements',
+            'icon': Icons.campaign_rounded,
+            'route': '/announcements/campus',
           },
           {
             'title': 'Reports',
@@ -242,6 +272,21 @@ class RoleMenus {
             'route': '/attendance/student',
           },
           {
+            'title': 'IA Marks',
+            'icon': Icons.assessment_rounded,
+            'route': '/ia/student',
+          },
+          {
+            'title': 'Exam Results',
+            'icon': Icons.workspace_premium_rounded,
+            'route': '/student/results',
+          },
+          {
+            'title': 'Academic Status',
+            'icon': Icons.timeline_rounded,
+            'route': '/student/academic-status',
+          },
+          {
             'title': 'Fee Details',
             'icon': Icons.monetization_on_rounded,
             'route': '/fees/my-fees',
@@ -251,10 +296,80 @@ class RoleMenus {
             'icon': Icons.local_library_rounded,
             'route': '/library',
           },
+          {
+            'title': 'Grievances',
+            'icon': Icons.support_agent_rounded,
+            'route': '/student/grievances',
+          },
+          {
+            'title': 'Notifications',
+            'icon': Icons.notifications_rounded,
+            'route': '/notifications',
+          },
         ]);
         break;
 
+      // --- LIBRARY OFFICER ROLE ---
       case AppRoles.library:
+        menu.addAll([
+          {
+            'title': 'Dashboard',
+            'icon': Icons.dashboard_customize_rounded,
+            'route': '/library/officer',
+          },
+          {
+            'title': 'Book Inventory',
+            'icon': Icons.inventory_2_rounded,
+            'route': '/library/catalog',
+          },
+          {
+            'title': 'Library Configuration',
+            'icon': Icons.tune_rounded,
+            'route': '/library/configuration',
+          },
+          {
+            'title': 'Borrowers',
+            'icon': Icons.people_alt_rounded,
+            'route': '/library/borrowers',
+          },
+          {
+            'title': 'Issue & Return Books',
+            'icon': Icons.swap_horiz_rounded,
+            'route': '/library/desk',
+          },
+          {
+            'title': 'Reservations',
+            'icon': Icons.bookmark_added_rounded,
+            'route': '/library/requests',
+          },
+          {
+            'title': 'Library Issue Cards',
+            'icon': Icons.badge_rounded,
+            'route': '/library/cards',
+          },
+          {
+            'title': 'Issue & Return History',
+            'icon': Icons.history_rounded,
+            'route': '/library/history',
+          },
+          {
+            'title': 'Notifications',
+            'icon': Icons.notifications_active_rounded,
+            'route': '/library/notifications',
+          },
+          {
+            'title': 'Reports',
+            'icon': Icons.assessment_rounded,
+            'route': '/library/reports',
+          },
+          {
+            'title': 'Feedback',
+            'icon': Icons.rate_review_rounded,
+            'route': '/library/feedback',
+          },
+        ]);
+        break;
+
       case AppRoles.exam:
       case AppRoles.scholarship:
         break;
