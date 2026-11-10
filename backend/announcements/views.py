@@ -35,9 +35,9 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         elif role == "HOD":
             dept = _resolve_department_for_user(user)
             if dept:
-                qs = qs.filter(Q(department=dept) | Q(department__isnull=True))
+                qs = qs.filter(Q(department=dept) | Q(department__isnull=True) | Q(created_by__role__in=["PRINCIPAL", "SYSTEM"]))
             else:
-                qs = qs.filter(department__isnull=True)
+                qs = qs.filter(Q(department__isnull=True) | Q(created_by__role__in=["PRINCIPAL", "SYSTEM"]))
         elif role == "PROFESSOR":
             fac = _resolve_faculty_for_user(user)
             fac_dept = fac.department if fac else getattr(user, "department", None)
@@ -143,8 +143,9 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if role == "HOD":
             dept = _resolve_department_for_user(user)
-            if not dept or instance.department_id != dept.id:
-                raise PermissionDenied("You can only edit announcements for your own department.")
+            is_principal_ann = hasattr(instance.created_by, 'role') and str(instance.created_by.role).upper() in ['PRINCIPAL', 'SYSTEM']
+            if not dept or instance.department_id != dept.id or is_principal_ann:
+                raise PermissionDenied("You can only edit announcements created by your department.")
         elif role not in ["PRINCIPAL", "SYSTEM"] and not user.is_superuser:
             raise PermissionDenied("You do not have permission to edit announcements.")
 
@@ -169,8 +170,9 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 
         if role == "HOD":
             dept = _resolve_department_for_user(user)
-            if not dept or instance.department_id != dept.id:
-                raise PermissionDenied("You can only delete announcements for your own department.")
+            is_principal_ann = hasattr(instance.created_by, 'role') and str(instance.created_by.role).upper() in ['PRINCIPAL', 'SYSTEM']
+            if not dept or instance.department_id != dept.id or is_principal_ann:
+                raise PermissionDenied("You can only delete announcements created by your department.")
             instance.delete()
         elif role in ["PRINCIPAL", "SYSTEM"] or user.is_superuser:
             instance.delete()

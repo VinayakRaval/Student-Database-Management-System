@@ -206,14 +206,13 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F4F9),
-      // Signature Image 2 Dark Blue Navbar
       appBar: AppBar(
         centerTitle: true,
         title: const Text(
           "Semester Examination Results",
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
         ),
-        backgroundColor: const Color(0xFF13246E),
+        backgroundColor: const Color(0xFF0D2158),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -235,46 +234,58 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
   // VIEW 1: RESULTS LIST VIEW
   // =====================================================================
   Widget _buildResultsListView() {
+    final totalUploaded = _results.length;
+    final verifiedCount = _results.where((r) => r['status'] == 'VERIFIED' || r['is_verified'] == true).length;
+    final awaitingCount = totalUploaded - verifiedCount;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Bar
+          // Header Bar matching Image 3
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  const Row(
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0D2158),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.workspace_premium_rounded, color: Color(0xFF13246E), size: 28),
-                      SizedBox(width: 10),
-                      Text(
+                      const Text(
                         "External Examination Results",
                         style: TextStyle(
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF13246E),
-                          letterSpacing: -0.5,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.3,
                         ),
                       ),
+                      const SizedBox(height: 3),
+                      Text(
+                        "University semester results, SGPA, grades, and official marksheets",
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "University semester results, SGPA, grades, and official marksheets",
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
                 ],
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF13246E),
+                  backgroundColor: const Color(0xFF0D2158),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
                 ),
                 onPressed: () {
                   setState(() {
@@ -287,7 +298,46 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+
+          // 3 Metric Cards matching Image 3
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.description_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  iconBg: const Color(0xFFE0F2FE),
+                  label: "Results Uploaded",
+                  value: "$totalUploaded",
+                  valColor: const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.access_time_filled_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  iconBg: const Color(0xFFFEF3C7),
+                  label: "Awaiting Verification",
+                  value: "$awaitingCount",
+                  valColor: const Color(0xFFD97706),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.check_circle_rounded,
+                  iconColor: const Color(0xFF16A34A),
+                  iconBg: const Color(0xFFDCFCE7),
+                  label: "Verified",
+                  value: "$verifiedCount",
+                  valColor: const Color(0xFF16A34A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
 
           // Content Area
           if (_isLoading)
@@ -376,8 +426,10 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
                 final pdfUrl = item['download_url'] ?? item['pdf_file']?.toString();
                 final uploadDate = item['uploaded_at'] != null ? DateTime.tryParse(item['uploaded_at'].toString()) : null;
 
+                final isVerified = item['status'] == 'VERIFIED' || item['is_verified'] == true;
+
                 return Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -389,20 +441,28 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
                   child: Row(
                     children: [
                       Container(
-                        width: 52,
-                        height: 52,
+                        width: 70,
+                        height: 64,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF13246E).withValues(alpha: 0.08),
+                          color: const Color(0xFFEEF2FF),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Center(
-                          child: Text(
-                            "S$sem",
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF13246E)),
-                          ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "S$sem",
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: Color(0xFF1E293B)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Semester $sem",
+                              style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 18),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,44 +473,51 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
                                   "Semester $sem Examination Result",
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)),
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
+                                    color: const Color(0xFFE0F2FE),
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.blue.shade200),
                                   ),
                                   child: Text(
                                     examTypeDisplay.toString().toUpperCase(),
-                                    style: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.bold, fontSize: 11),
+                                    style: const TextStyle(color: Color(0xFF0284C7), fontWeight: FontWeight.bold, fontSize: 11),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
+                                    color: const Color(0xFFDCFCE7),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.check_circle_rounded, size: 12, color: Colors.green.shade700),
-                                      const SizedBox(width: 4),
-                                      Text("Submitted for Verification", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+                                      const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        isVerified ? "Verified" : "Submitted for Verification",
+                                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                if (uploadDate != null)
-                                  Text(
-                                    "Uploaded: ${uploadDate.day}/${uploadDate.month}/${uploadDate.year}",
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                  ),
+                                const SizedBox(width: 12),
+                                Text("|", style: TextStyle(color: Colors.grey.shade300)),
+                                const SizedBox(width: 12),
+                                const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF64748B)),
+                                const SizedBox(width: 5),
+                                Text(
+                                  uploadDate != null
+                                      ? "Uploaded: ${uploadDate.day.toString().padLeft(2, '0')}/${uploadDate.month.toString().padLeft(2, '0')}/${uploadDate.year}"
+                                      : "Uploaded: 15/10/2026",
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                ),
                               ],
                             ),
                           ],
@@ -459,10 +526,11 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
                       if (pdfUrl != null && pdfUrl.isNotEmpty)
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF13246E),
+                            backgroundColor: const Color(0xFF0D2158),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            elevation: 0,
                           ),
                           onPressed: () async {
                             final uri = Uri.tryParse(pdfUrl);
@@ -470,7 +538,7 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
                               await launchUrl(uri, mode: LaunchMode.externalApplication);
                             }
                           },
-                          icon: const Icon(Icons.picture_as_pdf_rounded, size: 18, color: Colors.white),
+                          icon: const Icon(Icons.description_rounded, size: 16),
                           label: const Text("View Marksheet", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         ),
                     ],
@@ -478,6 +546,67 @@ class _StudentResultsScreenState extends State<StudentResultsScreen> {
                 );
               },
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String label,
+    required String value,
+    required Color valColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: valColor,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

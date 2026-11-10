@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:provider/provider.dart';
+import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/core/constants/api_constants.dart';
 import 'package:frontend/core/network/api_client.dart';
 import 'package:frontend/features/library/widgets/digital_library_card_widget.dart';
 
@@ -379,6 +382,9 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
     int activeIssues = _myIssues.where((i) => i['status'] == 'issued').length;
     int pendingRequests = _myRequests.where((r) => r['status'] == 'pending').length;
 
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isStudent = (auth.role ?? '').toUpperCase() == AppRoles.student;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -455,23 +461,25 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                 )
               : Column(
                   children: [
-                    // Top Metric KPI Cards Bar
-                    Container(
-                      color: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      child: Row(
-                        children: [
-                          _buildKpiCard("TOTAL TITLES", "$totalBooks Books", Icons.menu_book_rounded, const Color(0xFF13246E)),
-                          const SizedBox(width: 12),
-                          _buildKpiCard("AVAILABLE COPIES", "$availableCopies In Stock", Icons.inventory_2_rounded, const Color(0xFF059669)),
-                          const SizedBox(width: 12),
-                          _buildKpiCard("MY BORROWED", "$activeIssues Active", Icons.account_circle_rounded, const Color(0xFF2563EB)),
-                          const SizedBox(width: 12),
-                          _buildKpiCard("LIBRARY CARD", _hasCard ? (_myCard?['status'] ?? 'APPLIED') : 'NOT ISSUED', Icons.badge_rounded, _hasCard && _myCard?['status'] == 'ACTIVE' ? const Color(0xFF059669) : const Color(0xFFD97706)),
-                        ],
+                    // Top Metric KPI Cards Bar (Removed for student role per user request)
+                    if (!isStudent) ...[
+                      Container(
+                        color: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: Row(
+                          children: [
+                            _buildKpiCard("TOTAL TITLES", "$totalBooks Books", Icons.menu_book_rounded, const Color(0xFF13246E)),
+                            const SizedBox(width: 12),
+                            _buildKpiCard("AVAILABLE COPIES", "$availableCopies In Stock", Icons.inventory_2_rounded, const Color(0xFF059669)),
+                            const SizedBox(width: 12),
+                            _buildKpiCard("MY BORROWED", "$activeIssues Active", Icons.account_circle_rounded, const Color(0xFF2563EB)),
+                            const SizedBox(width: 12),
+                            _buildKpiCard("LIBRARY CARD", _hasCard ? (_myCard?['status'] ?? 'APPLIED') : 'NOT ISSUED', Icons.badge_rounded, _hasCard && _myCard?['status'] == 'ACTIVE' ? const Color(0xFF059669) : const Color(0xFFD97706)),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    ],
 
                     // Tab Views
                     Expanded(
@@ -496,15 +504,15 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: color.withOpacity(0.15),
+              backgroundColor: color.withValues(alpha: 0.15),
               child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(width: 12),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/widgets/app_pagination_bar.dart';
 
 class HODReportsScreen extends StatefulWidget {
   const HODReportsScreen({super.key});
@@ -16,6 +17,9 @@ class _HODReportsScreenState extends State<HODReportsScreen> {
   String _searchQuery = '';
   DateTime? _startDate;
   DateTime? _endDate;
+
+  int _currentPage = 1;
+  final int _pageSize = 10;
 
   List<Map<String, dynamic>> _semesters = [];
   List<Map<String, dynamic>> _academicYears = [];
@@ -108,6 +112,7 @@ class _HODReportsScreenState extends State<HODReportsScreen> {
           _rows = rowData.map((r) => Map<String, dynamic>.from(r as Map)).toList();
           _summary = Map<String, dynamic>.from(res.data['summary'] ?? {});
           _deptInfo = Map<String, dynamic>.from(res.data['department_info'] ?? {});
+          _currentPage = 1;
           _isLoadingReport = false;
         });
       }
@@ -536,46 +541,73 @@ class _HODReportsScreenState extends State<HODReportsScreen> {
                                             child: Text("No records match the selected report criteria."),
                                           ),
                                         )
-                                      : SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          child: DataTable(
-                                            headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                                            columns: _columns.map((col) => DataColumn(
-                                              label: Text(col, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                            )).toList(),
-                                            rows: _rows.map((row) {
-                                              return DataRow(
-                                                cells: _columns.map((col) {
-                                                  final key = _findKeyForColumn(col, row);
-                                                  final val = row[key]?.toString() ?? '—';
-                                                  final isEligible = val.contains("Eligible");
-                                                  final isShortage = val.contains("Shortage") || val.contains("Support") || val.contains("Review");
+                                      : Builder(
+                                          builder: (context) {
+                                            final totalItems = _rows.length;
+                                            final totalPages = totalItems == 0 ? 1 : (totalItems / _pageSize).ceil();
+                                            final safePage = _currentPage > totalPages ? totalPages : (_currentPage < 1 ? 1 : _currentPage);
+                                            final pageRows = totalItems == 0 ? <Map<String, dynamic>>[] : _rows.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
 
-                                                  if (isEligible || isShortage) {
-                                                    return DataCell(
-                                                      Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                        decoration: BoxDecoration(
-                                                          color: (isEligible ? Colors.green : Colors.red).withOpacity(0.12),
-                                                          borderRadius: BorderRadius.circular(6),
-                                                        ),
-                                                        child: Text(
-                                                          val,
-                                                          style: TextStyle(
-                                                            color: isEligible ? Colors.green.shade800 : Colors.red.shade800,
-                                                            fontWeight: FontWeight.bold,
-                                                            fontSize: 12,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                SingleChildScrollView(
+                                                  scrollDirection: Axis.horizontal,
+                                                  child: DataTable(
+                                                    headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                                                    columns: _columns.map((col) => DataColumn(
+                                                      label: Text(col, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                    )).toList(),
+                                                    rows: pageRows.map((row) {
+                                                      return DataRow(
+                                                        cells: _columns.map((col) {
+                                                          final key = _findKeyForColumn(col, row);
+                                                          final val = row[key]?.toString() ?? '—';
+                                                          final isEligible = val.contains("Eligible");
+                                                          final isShortage = val.contains("Shortage") || val.contains("Support") || val.contains("Review");
 
-                                                  return DataCell(Text(val));
-                                                }).toList(),
-                                              );
-                                            }).toList(),
-                                          ),
+                                                          if (isEligible || isShortage) {
+                                                            return DataCell(
+                                                              Container(
+                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                                decoration: BoxDecoration(
+                                                                  color: (isEligible ? Colors.green : Colors.red).withOpacity(0.12),
+                                                                  borderRadius: BorderRadius.circular(6),
+                                                                ),
+                                                                child: Text(
+                                                                  val,
+                                                                  style: TextStyle(
+                                                                    color: isEligible ? Colors.green.shade800 : Colors.red.shade800,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 12,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }
+
+                                                          return DataCell(Text(val));
+                                                        }).toList(),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                AppPaginationBar(
+                                                  currentPage: safePage,
+                                                  totalPages: totalPages,
+                                                  totalItems: totalItems,
+                                                  pageSize: _pageSize,
+                                                  activeColor: const Color(0xFF13246E),
+                                                  onPageChanged: (newPage) {
+                                                    setState(() {
+                                                      _currentPage = newPage;
+                                                    });
+                                                  },
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         ),
                         ),
                       ],

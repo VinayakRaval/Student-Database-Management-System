@@ -3,7 +3,8 @@ from .views import (
     DepartmentListCreateView, DepartmentDetailView,
     SemesterListCreateView, SemesterDetailView,
     AcademicYearListCreateView, AcademicYearDetailView,
-    SchemaListCreateView, SchemaDetailView
+    SchemaListCreateView, SchemaDetailView,
+    SemesterFinalizeView, SemesterFinalizationStatusView
 )
 from .reports import DepartmentReportsView
 
@@ -25,6 +26,11 @@ urlpatterns = [
     path("schemas/", SchemaListCreateView.as_view(), name="schema_list_create"),
     path("schemas/<int:pk>/", SchemaDetailView.as_view(), name="schema_detail"),
 
-    # Department Reports
+    # Department & Faculty Reports
     path("reports/department/", DepartmentReportsView.as_view(), name="department_reports"),
+    path("reports/faculty/", DepartmentReportsView.as_view(), name="faculty_reports"),
+
+    # Semester Finalization & Marks Lock
+    path("semesters/finalize/", SemesterFinalizeView.as_view(), name="semester_finalize"),
+    path("semesters/finalization-status/", SemesterFinalizationStatusView.as_view(), name="semester_finalization_status"),
 ]

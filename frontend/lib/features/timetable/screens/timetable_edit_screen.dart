@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../providers/timetable_provider.dart';
 import '../models/timetable_model.dart';
+import '../widgets/add_slot_dialog.dart';
+import '../widgets/official_timetable_header.dart';
 
 class TimetableEditScreen extends ConsumerStatefulWidget {
   final int id;
@@ -16,6 +18,7 @@ class TimetableEditScreen extends ConsumerStatefulWidget {
 class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
   bool _isLoading = true;
   TimeTable? _timetable;
+  DateTime? _effectiveDate;
   List<Map<String, dynamic>> _slots = [];
 
   @override
@@ -32,12 +35,8 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
       if (mounted) {
         setState(() {
           _timetable = timetable;
-          _slots = timetable.slots.map((s) => <String, dynamic>{
-            "day": s.day,
-            "assignment": s.assignmentId,
-            "start_time": s.startTime,
-            "end_time": s.endTime,
-          }).toList();
+          _effectiveDate = timetable.effectiveDate != null ? DateTime.tryParse(timetable.effectiveDate!) : null;
+          _slots = timetable.slots.map((s) => s.toMap()).toList();
           _isLoading = false;
         });
       }
@@ -57,6 +56,7 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
       "department": _timetable!.departmentId,
       "semester": _timetable!.semesterId,
       "academic_year": _timetable!.academicYearId,
+      "effective_date": _effectiveDate != null ? DateFormat('yyyy-MM-dd').format(_effectiveDate!) : null,
       "remarks": "Updated via App",
       "slots": _slots 
     };
@@ -89,28 +89,42 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
-          TextButton(
-            onPressed: _submitUpdate,
-            child: const Text("Save Changes", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          )
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            tooltip: "Delete Timetable",
+            onPressed: _confirmDeleteTimetable,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text("Save Changes", style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF13246E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: _submitUpdate,
+            ),
+          ),
         ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Header (Read Only)
-            Container(
-              padding: const EdgeInsets.all(16),
-              width: double.infinity,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_timetable!.departmentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("Semester ${_timetable!.semesterNo} • ${_timetable!.academicYearLabel}", style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
+            // Official Timetable Header with editable W.E.F Date
+            OfficialTimetableHeader(
+              departmentName: _timetable!.departmentName,
+              semesterNo: _timetable!.semesterNo,
+              academicYear: _timetable!.academicYearLabel,
+              classTeacherName: _timetable!.classTeacherName,
+              effectiveDate: _effectiveDate,
+              onEffectiveDateChanged: (newDate) {
+                setState(() {
+                  _effectiveDate = newDate;
+                });
+              },
             ),
             const SizedBox(height: 20),
             
@@ -145,105 +159,242 @@ class _TimetableEditScreenState extends ConsumerState<TimetableEditScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: Chip(label: Text(day))),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Chip(
+            backgroundColor: const Color(0xFF13246E),
+            label: Text(day, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ),
         ...daySlots.map((slot) {
-          final assignment = assignments.firstWhere((a) => a.id == slot['assignment'], orElse: () => AssignmentOption(id: 0, subjectName: 'Unknown', facultyName: ''));
-          
+          final isBatchWise = slot['is_batch_wise'] == true || (slot['batches'] is List && (slot['batches'] as List).isNotEmpty);
+          final batches = isBatchWise ? (slot['batches'] as List? ?? []) : [];
+
           final start = slot['start_time'] as String;
           Widget? breakWidget;
           if (start.startsWith("11:30")) breakWidget = _buildBreakDivider("BREAK (11:20)");
           if (start.startsWith("14:00")) breakWidget = _buildBreakDivider("LUNCH (01:20)");
 
-                  final hasDept = assignment.subjectDepartment != null && assignment.subjectDepartment!.trim().isNotEmpty;
-                  final deptTag = hasDept ? " [${assignment.subjectDepartment}]" : "";
-                  final codeTag = (assignment.subjectCode != null && assignment.subjectCode!.trim().isNotEmpty) ? " (${assignment.subjectCode})" : "";
-                  return Column(
-                    children: [
-                      ?breakWidget,
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: const Icon(Icons.access_time),
-                          title: Text("${slot['start_time']} - ${slot['end_time']}"),
-                          subtitle: Text("${assignment.subjectName}$codeTag$deptTag (${assignment.facultyName})"),
-                          trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _slots.remove(slot))),
+          if (isBatchWise) {
+            return Column(
+              children: [
+                ?breakWidget,
+                Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.science_outlined, color: Color(0xFF13246E), size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              TimeTable.formatTimeRange12(slot['start_time'], slot['end_time']),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE0E7FF),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                "${batches.length} BATCHES",
+                                style: const TextStyle(color: Color(0xFF3730A3), fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (slot['allow_co_teaching'] == true) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  "CO-TEACHING",
+                                  style: TextStyle(color: Color(0xFF166534), fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => setState(() => _slots.remove(slot)),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  );
+                        const Divider(height: 12, color: Color(0xFFF1F5F9)),
+                        // Display Batch rows (Req 9)
+                        ...batches.map((b) {
+                          final bMap = Map<String, dynamic>.from(b as Map);
+                          final bAssign = assignments.firstWhere(
+                            (a) => a.id == bMap['assignment'],
+                            orElse: () => AssignmentOption(id: 0, subjectName: 'Unknown', facultyName: ''),
+                          );
+                          final bName = bMap['batch_name'] ?? 'Batch';
+                          final room = (bMap['lab_room'] != null && bMap['lab_room'].toString().isNotEmpty)
+                              ? " • Room: ${bMap['lab_room']}"
+                              : "";
+                          final timeStr = (bMap['start_time'] != null && bMap['start_time'] != slot['start_time'])
+                              ? " (${TimeTable.formatTimeRange12(bMap['start_time'], bMap['end_time'])})"
+                              : "";
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF13246E),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    bName,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    "${bAssign.subjectName}$room$timeStr • Prof: ${bAssign.facultyName}",
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF334155), fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final assignment = assignments.firstWhere(
+            (a) => a.id == slot['assignment'],
+            orElse: () => AssignmentOption(id: 0, subjectName: 'Unknown', facultyName: ''),
+          );
+          
+          final hasDept = assignment.subjectDepartment != null && assignment.subjectDepartment!.trim().isNotEmpty;
+          final deptTag = hasDept ? " [${assignment.subjectDepartment}]" : "";
+          final codeTag = (assignment.subjectCode != null && assignment.subjectCode!.trim().isNotEmpty) ? " (${assignment.subjectCode})" : "";
+
+          return Column(
+            children: [
+              ?breakWidget,
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.access_time, color: Color(0xFF13246E)),
+                  title: Text(TimeTable.formatTimeRange12(slot['start_time'], slot['end_time']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text("${assignment.subjectName}$codeTag$deptTag (${assignment.facultyName})", style: const TextStyle(fontSize: 12)),
+                  trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => setState(() => _slots.remove(slot))),
+                ),
+              ),
+            ],
+          );
         }),
       ],
     );
   }
 
   Widget _buildBreakDivider(String label) {
-    return Container(margin: const EdgeInsets.symmetric(vertical: 8), padding: const EdgeInsets.symmetric(vertical: 4), width: double.infinity, color: Colors.amber[100], alignment: Alignment.center, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.brown)));
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      width: double.infinity,
+      color: Colors.amber[100],
+      alignment: Alignment.center,
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.brown)),
+    );
   }
 
   void _showAddSlotDialog(List<AssignmentOption> assignments) {
-    if (assignments.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No subjects."))); return; }
-    String selectedDay = "MON";
-    int? selectedAssignment = assignments.isNotEmpty ? assignments.first.id : null;
-    TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 30);
-    TimeOfDay endTime = const TimeOfDay(hour: 10, minute: 25);
+    if (assignments.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No subjects available.")));
+      return;
+    }
 
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setState) {
-      return AlertDialog(
-        title: const Text("Add Class Slot"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: "Day"), value: selectedDay,
-                items: ["MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-                onChanged: (val) => setState(() => selectedDay = val!),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<int>(
-                decoration: const InputDecoration(labelText: "Subject"), isExpanded: true,
-                value: (assignments.any((a) => a.id == selectedAssignment)) ? selectedAssignment : null,
-                items: assignments.map((a) {
-                  final hasDept = a.subjectDepartment != null && a.subjectDepartment!.trim().isNotEmpty;
-                  final deptTag = hasDept ? " [${a.subjectDepartment}]" : "";
-                  return DropdownMenuItem(value: a.id, child: Text("${a.subjectName}$deptTag\n(${a.facultyName})"));
-                }).toList(),
-                onChanged: (val) => setState(() => selectedAssignment = val),
-              ),
-              const SizedBox(height: 15),
-              const Text("Quick Select (Auto-skips breaks):", style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Wrap(spacing: 5, children: [
-                _timeChip("P1", 9, 30, 10, 25, setState, (s,e){ startTime=s; endTime=e; }),
-                _timeChip("P2", 10, 25, 11, 20, setState, (s,e){ startTime=s; endTime=e; }),
-                _timeChip("P3", 11, 30, 12, 25, setState, (s,e){ startTime=s; endTime=e; }),
-                _timeChip("P4", 12, 25, 13, 20, setState, (s,e){ startTime=s; endTime=e; }),
-                _timeChip("Post Lunch", 14, 00, 14, 55, setState, (s,e){ startTime=s; endTime=e; }),
-              ]),
-              const SizedBox(height: 15),
-              Row(children: [
-                Expanded(child: OutlinedButton(onPressed: () async { final t = await showTimePicker(context: context, initialTime: startTime); if(t!=null) setState(()=>startTime=t); }, child: Text("Start: ${startTime.format(context)}"))),
-                const SizedBox(width: 10),
-                Expanded(child: OutlinedButton(onPressed: () async { final t = await showTimePicker(context: context, initialTime: endTime); if(t!=null) setState(()=>endTime=t); }, child: Text("End: ${endTime.format(context)}"))),
-              ])
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          ElevatedButton(onPressed: () {
-            if (selectedAssignment == null) return;
-            String formatTime(TimeOfDay t) { final now = DateTime.now(); return DateFormat("HH:mm:ss").format(DateTime(now.year, now.month, now.day, t.hour, t.minute)); }
-            final Map<String, dynamic> newSlot = { "day": selectedDay, "assignment": selectedAssignment, "start_time": formatTime(startTime), "end_time": formatTime(endTime) };
-            this.setState(() { _slots.add(newSlot); });
-            Navigator.pop(ctx);
-          }, child: const Text("Add"))
-        ],
-      );
-    }));
+    showDialog(
+      context: context,
+      builder: (ctx) => AddClassSlotDialog(
+        availableAssignments: assignments,
+        onSave: (newSlot) {
+          setState(() {
+            _slots.add(newSlot);
+          });
+        },
+      ),
+    );
   }
 
-  Widget _timeChip(String label, int h1, int m1, int h2, int m2, Function setState, Function(TimeOfDay, TimeOfDay) onSelect) {
-    return ActionChip(label: Text(label, style: const TextStyle(fontSize: 10)), onPressed: () { setState(() { onSelect(TimeOfDay(hour: h1, minute: m1), TimeOfDay(hour: h2, minute: m2)); }); });
+  void _confirmDeleteTimetable() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_forever, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text("Delete Timetable?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          "Are you sure you want to permanently delete this department timetable? This action cannot be undone.",
+          style: TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await ref.read(timetableProvider.notifier).deleteTimetable(widget.id);
+              if (mounted) {
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Timetable deleted successfully."), backgroundColor: Colors.green),
+                  );
+                  ref.invalidate(timetableListProvider);
+                  context.go('/timetable/list');
+                } else {
+                  final err = ref.read(timetableProvider).errorMessage ?? "Failed to delete timetable.";
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(err), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
   }
 }

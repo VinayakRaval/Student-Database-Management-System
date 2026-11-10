@@ -1,17 +1,21 @@
 from django.contrib import admin
-from .models import TimeTable, TimeTableSlot, TimeTableApprovalHistory
+from .models import TimeTable, TimeTableSlot, TimeTableSlotBatch, TimeTableApprovalHistory
+
+class TimeTableSlotBatchInline(admin.TabularInline):
+    model = TimeTableSlotBatch
+    extra = 1
 
 class TimeTableSlotInline(admin.TabularInline):
     model = TimeTableSlot
     extra = 1
     readonly_fields = ("created_at",)
-    fields = ("day", "start_time", "end_time", "assignment")
+    fields = ("day", "start_time", "end_time", "assignment", "is_batch_wise", "batch_name", "lab_room", "allow_co_teaching")
 
 @admin.register(TimeTable)
 class TimeTableAdmin(admin.ModelAdmin):
     list_display = (
         "id", "department_name", "semester_number", "academic_year_label",
-        "version", "status", "is_active", "created_by", "created_at",
+        "effective_date", "version", "status", "is_active", "created_by", "created_at",
         "approved_by", "approved_at"
     )
     list_filter = ("department", "semester",  "academic_year", "status", "is_active")
@@ -32,19 +36,30 @@ class TimeTableAdmin(admin.ModelAdmin):
         return obj.semester.sem_number
     semester_number.admin_order_field = "semester"
 
-
     def academic_year_label(self, obj):
         return obj.academic_year.year_name
     academic_year_label.admin_order_field = "academic_year"
 
 @admin.register(TimeTableSlot)
 class TimeTableSlotAdmin(admin.ModelAdmin):
-    list_display = ("timetable", "day", "start_time", "end_time", "assignment")
-    list_filter = ("day",)
+    list_display = ("timetable", "day", "start_time", "end_time", "assignment", "is_batch_wise", "batch_name", "lab_room")
+    list_filter = ("day", "is_batch_wise")
     search_fields = (
-        "assignment__subject__code",
-        "assignment__subject__name",
+        "assignment__subject__subject_code",
+        "assignment__subject__subject_name",
         "assignment__faculty__name",
+    )
+    inlines = [TimeTableSlotBatchInline]
+
+@admin.register(TimeTableSlotBatch)
+class TimeTableSlotBatchAdmin(admin.ModelAdmin):
+    list_display = ("slot", "batch_name", "assignment", "lab_room", "start_time", "end_time", "allow_co_teaching")
+    list_filter = ("batch_name", "allow_co_teaching")
+    search_fields = (
+        "batch_name",
+        "lab_room",
+        "assignment__subject__subject_name",
+        "assignment__faculty__name"
     )
 
 @admin.register(TimeTableApprovalHistory)

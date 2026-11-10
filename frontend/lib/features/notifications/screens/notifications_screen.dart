@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/providers/notification_count_manager.dart';
+import 'package:frontend/core/widgets/app_pagination_bar.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -15,6 +17,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _errorMessage;
   String _activeTab = 'ALL'; // ALL, CAMPUS, DEPARTMENT, ALERTS, UNREAD
   String _searchQuery = '';
+  int _currentPage = 1;
+  static const int _pageSize = 8;
 
   @override
   void initState() {
@@ -126,6 +130,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           _feedItems = combined;
           _isLoading = false;
         });
+        final unread = combined.where((c) => c['source_type'] == 'NOTIFICATION' && c['is_read'] != true).length;
+        NotificationCountManager.instance.setCount(unread);
       }
     } catch (e) {
       if (mounted) {
@@ -148,6 +154,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       setState(() {
         item['is_read'] = true;
       });
+      NotificationCountManager.instance.decrement();
     } catch (_) {}
   }
 
@@ -162,6 +169,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         item['is_read'] = true;
       }
     });
+    NotificationCountManager.instance.markAllAsRead();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -355,7 +363,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   // Search Field
                   TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                    onChanged: (val) => setState(() {
+                      _searchQuery = val.trim();
+                      _currentPage = 1;
+                    }),
                     decoration: InputDecoration(
                       hintText: "Search notices by keyword, title, or category...",
                       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
@@ -363,7 +374,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () => setState(() => _searchQuery = ''),
+                              onPressed: () => setState(() {
+                                _searchQuery = '';
+                                _currentPage = 1;
+                              }),
                             )
                           : null,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -454,17 +468,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ],
                 ),
               )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filtered.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 18),
-                itemBuilder: (context, index) {
-                  final item = filtered[index];
-                  return _buildAnnouncementCard(item);
-                },
-              ),
+            else ...[
+              () {
+                final totalPages = (filtered.length / _pageSize).ceil();
+                final safePage = _currentPage > totalPages && totalPages > 0 ? totalPages : _currentPage;
+                final paginated = filtered.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
+
+                return Column(
+                  children: [
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: paginated.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 18),
+                      itemBuilder: (context, index) {
+                        final item = paginated[index];
+                        return _buildAnnouncementCard(item);
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    AppPaginationBar(
+                      currentPage: safePage,
+                      totalPages: totalPages,
+                      totalItems: filtered.length,
+                      pageSize: _pageSize,
+                      onPageChanged: (page) => setState(() => _currentPage = page),
+                    ),
+                  ],
+                );
+              }(),
+            ],
           ],
         ),
       ),
@@ -485,7 +518,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         fontSize: 12,
       ),
       onSelected: (val) {
-        if (val) setState(() => _activeTab = tabKey);
+        if (val) {
+          setState(() {
+            _activeTab = tabKey;
+            _currentPage = 1;
+          });
+        }
       },
     );
   }

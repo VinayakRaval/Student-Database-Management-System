@@ -28,6 +28,6 @@ class SubjectAssignmentAdmin(admin.ModelAdmin):
     subject_name.short_description = 'Subject Name'
 
     def faculty_name(self, obj):
-        return obj.faculty.name
+        return obj.faculty.name if obj.faculty else "Unassigned"
     faculty_name.admin_order_field = 'faculty__name'
     faculty_name.short_description = 'Faculty'

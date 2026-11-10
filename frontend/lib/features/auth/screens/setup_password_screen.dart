@@ -445,6 +445,7 @@ class _SetupPasswordScreenState extends State<SetupPasswordScreen> {
         TextField(
           controller: _passwordController,
           obscureText: _obscurePassword,
+          textInputAction: TextInputAction.next,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: "Enter strong password",
@@ -464,6 +465,8 @@ class _SetupPasswordScreenState extends State<SetupPasswordScreen> {
         TextField(
           controller: _confirmPasswordController,
           obscureText: _obscureConfirm,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _confirmPassword(),
           decoration: InputDecoration(
             hintText: "Re-enter new password",
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

@@ -33,6 +33,9 @@ class Migration(migrations.Migration):
                 ('approved_date', models.DateTimeField(blank=True, null=True)),
                 ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='faculties', to='academics.department')),
             ],
+            options={
+                'db_table': 'faculty',
+            },
         ),
     ]
 

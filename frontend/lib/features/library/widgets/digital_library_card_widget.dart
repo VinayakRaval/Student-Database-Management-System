@@ -1,17 +1,42 @@
 import 'package:flutter/material.dart';
 
-class DigitalLibraryCardWidget extends StatelessWidget {
+class DigitalLibraryCardWidget extends StatefulWidget {
   final Map<String, dynamic> cardData;
   final List<Map<String, dynamic>> circulationRows;
+  final int initialPageIndex;
 
   const DigitalLibraryCardWidget({
     super.key,
     required this.cardData,
     this.circulationRows = const [],
+    this.initialPageIndex = 0,
   });
 
   @override
+  State<DigitalLibraryCardWidget> createState() => _DigitalLibraryCardWidgetState();
+}
+
+class _DigitalLibraryCardWidgetState extends State<DigitalLibraryCardWidget> {
+  late int _currentPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = widget.initialPageIndex;
+  }
+
+  @override
+  void didUpdateWidget(covariant DigitalLibraryCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialPageIndex != widget.initialPageIndex) {
+      _currentPage = widget.initialPageIndex;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cardData = widget.cardData;
+    final circulationRows = widget.circulationRows;
     final borrowerType = (cardData['borrower_type'] ?? 'STUDENT').toString().toUpperCase();
     final isFaculty = borrowerType == 'FACULTY';
     final borrowerName = cardData['borrower_name'] ?? cardData['student_name'] ?? cardData['name'] ?? 'Rahul Kumar';
@@ -22,7 +47,10 @@ class DigitalLibraryCardWidget extends StatelessWidget {
     final section = cardData['section'] ?? 'A';
     final usn = cardData['student_usn'] ?? cardData['borrower_id_number'] ?? cardData['usn'] ?? cardData['faculty_id'] ?? '4GE24CS030';
     final academicYear = cardData['academic_year'] ?? '2025-2026';
-    final cardNumber = cardData['card_number'] ?? 'LC-2026-0001';
+    final rawBaseCard = (cardData['card_number'] ?? 'LC-2026-0001').toString();
+    final baseCardNumber = rawBaseCard.contains(RegExp(r'-\d{2}$'))
+        ? rawBaseCard.replaceFirst(RegExp(r'-\d{2}$'), '')
+        : rawBaseCard;
     final validUntil = cardData['valid_until'] ?? '31-12-2026';
     final issuedAt = cardData['issued_at'] != null ? cardData['issued_at'].toString().substring(0, 10) : '2026-10-15';
     final sigHash = cardData['digital_signature_hash']?.toString() ?? '';
@@ -52,6 +80,32 @@ class DigitalLibraryCardWidget extends StatelessWidget {
         }
       }
     }
+
+    // Total pages: each card sheet has exactly 8 rows.
+    // When all 8 rows on the Library Issue Card are filled, automatically generate a new card / continuation page with 8 additional rows.
+    int totalPages = (effectiveRows.length ~/ 8) + 1;
+    final backendConts = cardData['continuation_cards'] as List?;
+    if (backendConts != null && backendConts.isNotEmpty) {
+      if (backendConts.length > totalPages) {
+        totalPages = backendConts.length;
+      }
+    }
+    if (_currentPage >= totalPages) {
+      _currentPage = totalPages - 1;
+    }
+    if (_currentPage < 0) {
+      _currentPage = 0;
+    }
+
+    final currentCardNumber = _currentPage == 0
+        ? baseCardNumber
+        : "$baseCardNumber-${_currentPage.toString().padLeft(2, '0')}";
+
+    final pageStart = _currentPage * 8;
+    final pageEnd = (pageStart + 8 < effectiveRows.length) ? pageStart + 8 : effectiveRows.length;
+    final pageRows = pageStart < effectiveRows.length
+        ? effectiveRows.sublist(pageStart, pageEnd)
+        : <Map<String, dynamic>>[];
 
     // Dynamic column definitions based on cardData['components']
     final rawComps = cardData['components'] as List?;
@@ -130,51 +184,136 @@ class DigitalLibraryCardWidget extends StatelessWidget {
     const gridColor = Color(0xFF6B2208); // Grid line dark maroon
 
     return Center(
-      child: Container(
-        width: 680,
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: gridColor, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Continuation Sheets Selector if multiple sheets exist
+          if (totalPages > 1)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_rounded, size: 14),
+                    onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                    tooltip: "Previous Card Sheet",
+                  ),
+                  const SizedBox(width: 4),
+                  ...List.generate(totalPages, (pIdx) {
+                    final isSelected = pIdx == _currentPage;
+                    final label = pIdx == 0
+                        ? "Card 1 (Original: $baseCardNumber)"
+                        : "Card ${pIdx + 1} (Continuation: $baseCardNumber-${pIdx.toString().padLeft(2, '0')})";
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: InkWell(
+                        onTap: () => setState(() => _currentPage = pIdx),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF13246E) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : const Color(0xFF475569),
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                    onPressed: _currentPage < totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                    tooltip: "Next Continuation Card",
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Top Badge / Card No & Status
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "CARD NO: $cardNumber",
-                  style: const TextStyle(
-                    fontFamily: 'Courier',
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: inkColor,
-                    letterSpacing: 1,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF059669),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    "DIGITALLY VERIFIED",
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
+          Container(
+            width: 680,
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: gridColor, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Top Badge / Card No & Status
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "CARD NO: $currentCardNumber",
+                      style: const TextStyle(
+                        fontFamily: 'Courier',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: inkColor,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_currentPage > 0) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E3A8A),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              "CONTINUATION SHEET ${_currentPage.toString().padLeft(2, '0')}",
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF059669),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            "DIGITALLY VERIFIED",
+                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
             const SizedBox(height: 8),
 
             // College Header & Card Header
@@ -321,7 +460,8 @@ class DigitalLibraryCardWidget extends StatelessWidget {
                 ),
                 // Data Rows (up to 8 rows, filled with actual loans or blank lines)
                 ...List.generate(8, (i) {
-                  final row = i < effectiveRows.length ? effectiveRows[i] : null;
+                  final row = i < pageRows.length ? pageRows[i] : null;
+                  final globalSerialNo = pageStart + i + 1;
                   return TableRow(
                     children: tableCols.map((col) {
                       if (col.isSignature) {
@@ -330,7 +470,7 @@ class DigitalLibraryCardWidget extends StatelessWidget {
                       String val = '';
                       if (row != null) {
                         if (col.key == 'serial_no') {
-                          val = "${row['serial_no'] ?? (i + 1)}";
+                          val = "${row['serial_no'] ?? globalSerialNo}";
                         } else if (col.key == 'book_title') {
                           val = (row['book_title'] ?? row['title'] ?? row['name'] ?? row['book'] ?? '').toString();
                         } else if (col.key == 'book_copy_no') {
@@ -345,7 +485,7 @@ class DigitalLibraryCardWidget extends StatelessWidget {
                           val = (row[col.key] ?? row[col.header] ?? row[col.header.replaceAll('\n', ' ')] ?? '').toString();
                         }
                       } else if (col.key == 'serial_no') {
-                        val = "${i + 1}";
+                        val = "$globalSerialNo";
                       }
                       return _buildDataCell(val, inkColor, isCenter: col.isCenter, isBold: col.isBold);
                     }).toList(),
@@ -483,8 +623,10 @@ class DigitalLibraryCardWidget extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ],
+  ),
+);
+}
 
   Widget _buildDottedRow(String label, String value, Color color) {
     return Row(

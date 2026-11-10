@@ -236,6 +236,25 @@ class TimetableController extends StateNotifier<TimetableState> {
     }
   }
 
+  Future<bool> patchTimetable(
+    int id,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      await _dio.patch(
+        '/timetable/timetables/$id/',
+        data: payload,
+      );
+      await fetchTimetables();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        errorMessage: 'Update failed: ${_errorText(error)}',
+      );
+      return false;
+    }
+  }
+
   Future<bool> approveTimetable(
     int id,
     String action, {
@@ -285,10 +304,39 @@ class TimetableController extends StateNotifier<TimetableState> {
     }
   }
 
+  Future<bool> deleteTimetable(int id) async {
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      isSuccess: false,
+    );
+
+    try {
+      await _dio.delete('/timetable/timetables/$id/');
+
+      state = state.copyWith(
+        isLoading: false,
+        isSuccess: true,
+        clearError: true,
+      );
+
+      await fetchTimetables();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        isSuccess: false,
+        errorMessage: 'Delete failed: ${_errorText(error)}',
+      );
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> fetchScheduleDetails({
     int? semester,
     String? search,
     bool personal = false,
+    String? academicYear,
   }) async {
     state = state.copyWith(
       isLoading: true,
@@ -300,6 +348,9 @@ class TimetableController extends StateNotifier<TimetableState> {
       if (semester != null) queryParams['semester'] = semester;
       if (search != null && search.trim().isNotEmpty) queryParams['search'] = search.trim();
       if (personal) queryParams['personal'] = 'true';
+      if (academicYear != null && academicYear.trim().isNotEmpty && academicYear.trim().toLowerCase() != 'all') {
+        queryParams['academic_year'] = academicYear.trim();
+      }
 
       final response = await _dio.get(
         '/timetable/timetables/my_schedule/',
@@ -334,6 +385,8 @@ class TimetableController extends StateNotifier<TimetableState> {
         'slots': slots,
         'assigned_subjects': assignedSubjects,
         'faculty_name': facultyName,
+        'class_teacher_name': data is Map ? data['class_teacher_name']?.toString() : null,
+        'class_teacher_id': data is Map ? data['class_teacher_id']?.toString() : null,
       };
     } catch (error) {
       state = state.copyWith(
@@ -348,8 +401,8 @@ class TimetableController extends StateNotifier<TimetableState> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchMySchedule({int? semester, String? search}) async {
-    final result = await fetchScheduleDetails(semester: semester, search: search);
+  Future<List<Map<String, dynamic>>> fetchMySchedule({int? semester, String? search, String? academicYear}) async {
+    final result = await fetchScheduleDetails(semester: semester, search: search, academicYear: academicYear);
     return (result['slots'] as List<Map<String, dynamic>>?) ?? [];
   }
 }

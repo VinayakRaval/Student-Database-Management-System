@@ -15,6 +15,7 @@ ROLE_CHOICES = [
     ('SCHOLARSHIP', 'Scholarship'),
     ('ACCOUNTS', 'Accounts'),
     ('SYSTEM', 'SystemAdmin'),
+    ('PLACEMENT_OFFICER', 'Placement Officer'),
 ]
 
 
@@ -70,6 +71,15 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = "custom_user"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.force_password_change:
+            try:
+                from faculty.models import Faculty
+                Faculty.objects.filter(user=self).update(temp_password=None)
+            except Exception:
+                pass
 
     def __str__(self):
         return self.email or self.phone or self.user_id or f"User-{self.pk}"
@@ -270,6 +280,11 @@ class AccountInvitation(models.Model):
         user.is_active = True
         user.force_password_change = False
         user.save()
+        try:
+            from faculty.models import Faculty
+            Faculty.objects.filter(user=user).update(temp_password=None, password_setup_completed_at=timezone.now())
+        except Exception:
+            pass
 
         self.status = self.STATUS_ACCEPTED
         self.used_at = timezone.now()
@@ -280,3 +295,53 @@ class AccountInvitation(models.Model):
             user=user,
             status__in=[AccountInvitation.STATUS_PENDING, AccountInvitation.STATUS_SENT]
         ).exclude(id=self.id).update(status=AccountInvitation.STATUS_REVOKED)
+
+
+
+class PasswordAuditLog(models.Model):
+    """
+    Sanitized audit trail for administrative password events (initial generation and resets).
+    Strictly excludes plaintext passwords, hashes, tokens, or credential payloads.
+    """
+    ACTION_INITIAL_CREATION = 'INITIAL_CREATION'
+    ACTION_RESET = 'RESET'
+    ACTION_CHOICES = [
+        (ACTION_INITIAL_CREATION, 'Initial Password Creation'),
+        (ACTION_RESET, 'Password Reset'),
+    ]
+
+    actor = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='performed_password_actions'
+    )
+    actor_email = models.CharField(max_length=254, blank=True)
+    actor_role = models.CharField(max_length=50, blank=True)
+
+    target_user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='password_audit_logs'
+    )
+    target_user_id_str = models.CharField(max_length=100, blank=True)
+    target_role = models.CharField(max_length=50, blank=True)
+
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES, default=ACTION_RESET)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='SUCCESS')
+    reason = models.TextField(blank=True, default='')
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'password_audit_log'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['target_user', 'timestamp']),
+            models.Index(fields=['actor', 'timestamp']),
+            models.Index(fields=['action', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.action} on {self.target_user_id_str} by {self.actor_email} [{self.status}]"

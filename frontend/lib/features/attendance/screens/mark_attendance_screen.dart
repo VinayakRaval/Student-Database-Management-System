@@ -23,11 +23,18 @@ class MarkAttendanceScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF13246E),
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Mark Attendance", style: TextStyle(fontSize: 16)),
-            Text(subjectName ?? "Class", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            const Text("Mark Attendance", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF13246E))),
+            Text(subjectName ?? "Class", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade600)),
           ],
         ),
         actions: [

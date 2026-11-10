@@ -34,6 +34,8 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
         rawList = response.data['results'];
       }
       final students = rawList.map((e) => StudentAttendanceModel.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      // Sort by USN in ascending order
+      students.sort((a, b) => a.usn.trim().compareTo(b.usn.trim()));
 
       state = state.copyWith(status: AttendanceStatus.loaded, students: students);
     } catch (e) {

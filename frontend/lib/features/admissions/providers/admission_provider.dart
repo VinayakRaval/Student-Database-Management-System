@@ -38,6 +38,7 @@ class AdmissionState {
   final String? successMessage;
   final int? fetchedFeeStructureId;
   final double? fetchedFeeAmount;
+  final String? temporaryPassword;
 
   AdmissionState({
     this.isLoading = false,
@@ -45,6 +46,7 @@ class AdmissionState {
     this.successMessage,
     this.fetchedFeeStructureId,
     this.fetchedFeeAmount,
+    this.temporaryPassword,
   });
 
   AdmissionState copyWith({
@@ -53,6 +55,7 @@ class AdmissionState {
     String? successMessage,
     int? fetchedFeeStructureId,
     double? fetchedFeeAmount,
+    String? temporaryPassword,
   }) {
     return AdmissionState(
       isLoading: isLoading ?? this.isLoading,
@@ -61,11 +64,11 @@ class AdmissionState {
       fetchedFeeStructureId:
           fetchedFeeStructureId ?? this.fetchedFeeStructureId,
       fetchedFeeAmount: fetchedFeeAmount ?? this.fetchedFeeAmount,
+      temporaryPassword: temporaryPassword,
     );
   }
 }
 
-// --- NOTIFIER ---
 class AdmissionNotifier extends StateNotifier<AdmissionState> {
   AdmissionNotifier() : super(AdmissionState());
 
@@ -202,10 +205,15 @@ class AdmissionNotifier extends StateNotifier<AdmissionState> {
           }
         }
 
+        final tempPassword = (response.data is Map && response.data['temporary_password'] != null)
+            ? response.data['temporary_password'].toString()
+            : null;
+
         if (mounted) {
           state = state.copyWith(
             isLoading: false,
             successMessage: "Registration Successful",
+            temporaryPassword: tempPassword,
           );
         }
         return studentId;

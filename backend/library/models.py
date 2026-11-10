@@ -347,12 +347,77 @@ class LibraryCard(models.Model):
     recorded_books = models.JSONField(default=list, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
 
+    parent_card = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='continuation_cards')
+    continuation_index = models.PositiveIntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'library_card'
-        ordering = ['-created_at']
+        ordering = ['continuation_index', '-created_at']
+
+    def get_or_create_continuation_cards(self, total_rows_count=None):
+        """
+        When all 8 rows on the Library Issue Card are filled, automatically generate
+        a continuation card linked to this card, formatted as LC-YYYY-XXXX-01, -02, etc.
+        """
+        if self.parent_card is not None:
+            return self.parent_card.get_or_create_continuation_cards(total_rows_count)
+
+        if not self.card_number:
+            return []
+
+        if total_rows_count is None:
+            user = self.student_user or (self.student.user if self.student else None) or (self.faculty.user if self.faculty else None)
+            from .models import IssueRecord
+            rec_count = len(self.recorded_books) if isinstance(self.recorded_books, list) else 0
+            db_count = IssueRecord.objects.filter(borrower=user).count() if user else 0
+            total_rows_count = max(rec_count, db_count)
+
+        # When all 8 rows on the card are filled, generate continuation card (each holds 8 rows)
+        needed_continuations = total_rows_count // 8
+        created_or_found = []
+
+        for c_idx in range(1, needed_continuations + 1):
+            c_number = f"{self.card_number}-{c_idx:02d}"
+            cont_card, created = LibraryCard.objects.get_or_create(
+                card_number=c_number,
+                defaults={
+                    'parent_card': self,
+                    'continuation_index': c_idx,
+                    'borrower_type': self.borrower_type,
+                    'student_user': self.student_user,
+                    'student': self.student,
+                    'faculty': self.faculty,
+                    'department': self.department,
+                    'academic_year': self.academic_year,
+                    'semester': self.semester,
+                    'section': self.section,
+                    'roll_no': self.roll_no,
+                    'student_photo': self.student_photo,
+                    'card_fee': 0.00,
+                    'fee_paid': True,
+                    'fee_payment_reference': self.fee_payment_reference,
+                    'status': self.status,
+                    'hod_verified_by': self.hod_verified_by,
+                    'hod_verified_at': self.hod_verified_at,
+                    'issued_by': self.issued_by,
+                    'issued_at': self.issued_at,
+                    'valid_until': self.valid_until,
+                    'digital_signature_hash': self.digital_signature_hash,
+                    'components': self.components,
+                    'signature_image': self.signature_image,
+                    'hod_signature_image': self.hod_signature_image,
+                }
+            )
+            if not created and cont_card.parent_card_id != self.id:
+                cont_card.parent_card = self
+                cont_card.continuation_index = c_idx
+                cont_card.save(update_fields=['parent_card', 'continuation_index'])
+            created_or_found.append(cont_card)
+
+        return created_or_found
 
     @classmethod
     def generate_next_card_number(cls, year=None):

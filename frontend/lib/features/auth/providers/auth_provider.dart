@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:frontend/core/api/api_service.dart';
@@ -33,14 +34,26 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> login(String identifier, String password) async {
+    final cleanId = identifier.trim();
+    final cleanPass = password.trim();
+
+    if (cleanId.isEmpty || cleanPass.isEmpty) {
+      _error = 'Please enter both username/email and password.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
+      await _storage.delete('access');
+      await _storage.delete('refresh');
       final response = await _api.dio.post(
         'userlogin/login/',
-        data: {'identifier': identifier, 'password': password},
+        data: {'identifier': cleanId, 'password': cleanPass},
       );
 
       final data = response.data;
@@ -60,7 +73,22 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       print('Login error: $e');
-      _error = 'Login failed. Check your credentials.';
+      String errMsg = 'Login failed. Check your credentials.';
+      if (e is DioException && e.response?.data != null) {
+        final d = e.response!.data;
+        if (d is Map) {
+          if (d['error'] != null) {
+            errMsg = d['error'].toString();
+          } else if (d['detail'] != null) {
+            errMsg = d['detail'].toString();
+          } else if (d['message'] != null) {
+            errMsg = d['message'].toString();
+          }
+        } else if (d is String && d.isNotEmpty) {
+          errMsg = d;
+        }
+      }
+      _error = errMsg;
       _isLoading = false;
       notifyListeners();
       return false;

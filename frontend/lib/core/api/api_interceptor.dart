@@ -10,9 +10,22 @@ class ApiInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = await _storage.read('access');
-    if (token != null) {
-      options.headers['Authorization'] = 'Bearer $token';
+    final path = options.path.toLowerCase();
+    final isPublicAuth = path.contains('login') ||
+        path.contains('token/refresh') ||
+        path.contains('password/reset') ||
+        path.contains('password/forgot') ||
+        path.contains('setup-password') ||
+        path.contains('register');
+
+    if (!isPublicAuth) {
+      final token = await _storage.read('access');
+      if (token != null && token.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+    } else {
+      options.headers.remove('Authorization');
+      options.headers.remove('authorization');
     }
     super.onRequest(options, handler);
   }

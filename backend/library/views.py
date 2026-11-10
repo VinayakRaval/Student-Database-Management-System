@@ -694,6 +694,17 @@ class IssueViewSet(viewsets.ModelViewSet):
                 extra={'borrower': str(borrower), 'copy': str(copy), 'due_date': str(due_date)}
             )
 
+            # Auto-generate continuation card if 8 rows on Library Issue Card are filled
+            try:
+                card = LibraryCard.objects.filter(student_user=borrower, parent_card__isnull=True).first()
+                if not card:
+                    card = LibraryCard.objects.filter(student__user=borrower, parent_card__isnull=True).first()
+                if card:
+                    total_issues = IssueRecord.objects.filter(borrower=borrower).count()
+                    card.get_or_create_continuation_cards(total_issues)
+            except Exception:
+                pass
+
         serializer = self.get_serializer(issue)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -1006,7 +1017,8 @@ class LibraryCardViewSet(viewsets.ModelViewSet):
         if user.is_staff or role in ['LIBRARY', 'PRINCIPAL', 'SYSTEM']:
             qs = LibraryCard.objects.select_related('student_user', 'student', 'faculty', 'department', 'hod_verified_by', 'issued_by').all()
         elif role == 'HOD':
-            dept = getattr(user, 'department', None)
+            from timetable.views import _resolve_department_for_user
+            dept = _resolve_department_for_user(user)
             if dept:
                 qs = LibraryCard.objects.select_related('student_user', 'student', 'faculty', 'department', 'hod_verified_by', 'issued_by').filter(department=dept, borrower_type='STUDENT')
             else:
@@ -2129,25 +2141,34 @@ class LibraryCardViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_card(self, request):
         user = request.user
-        card = LibraryCard.objects.filter(student_user=user).order_by('-created_at').first()
+        card = LibraryCard.objects.filter(student_user=user, parent_card__isnull=True).order_by('-created_at').first()
         if not card:
-            card = LibraryCard.objects.filter(faculty__user=user).order_by('-created_at').first()
+            card = LibraryCard.objects.filter(faculty__user=user, parent_card__isnull=True).order_by('-created_at').first()
         if not card:
-            card = LibraryCard.objects.filter(student__user=user).order_by('-created_at').first()
+            card = LibraryCard.objects.filter(student__user=user, parent_card__isnull=True).order_by('-created_at').first()
+        if not card:
+            card = LibraryCard.objects.filter(student_user=user).order_by('continuation_index').first()
         if not card:
             return Response({'has_card': False, 'card': None})
 
-        issues = IssueRecord.objects.filter(borrower=user).select_related('copy', 'copy__book', 'created_by').order_by('-issued_at')[:20]
+        issues = list(IssueRecord.objects.filter(borrower=user).select_related('copy', 'copy__book', 'created_by').order_by('issued_at'))
+        
+        # Ensure continuation cards are automatically generated when rows reach or exceed 8
+        card.get_or_create_continuation_cards(len(issues))
+
         issue_logs = []
         for idx, iss in enumerate(issues, start=1):
             issue_logs.append({
                 'serial_no': idx,
-                'book_title': iss.copy.book.title,
+                'issue_id': iss.issue_id,
+                'book_title': iss.copy.book.title if (iss.copy and iss.copy.book) else 'Book',
                 'book_copy_no': iss.copy.barcode or f"Copy #{iss.copy.copy_number}",
-                'issued_date': iss.issued_at.strftime('%d-%m-%Y') if iss.issued_at else '-',
-                'return_date': iss.returned_at.strftime('%d-%m-%Y') if iss.returned_at else ('Pending' if iss.status == 'issued' else iss.status),
+                'issued_date': iss.issued_at.strftime('%Y-%m-%d') if iss.issued_at else '-',
+                'due_date': iss.due_date.strftime('%Y-%m-%d') if iss.due_date else '-',
+                'return_date': iss.returned_at.strftime('%Y-%m-%d') if iss.returned_at else ('Pending' if iss.status == 'issued' else iss.status),
                 'librarian_signature': iss.created_by.get_full_name() if iss.created_by else 'Librarian (Digital Stamp)',
                 'is_returned': iss.returned_at is not None,
+                'status': iss.status,
             })
 
         card_data = LibraryCardSerializer(card, context={'request': request}).data

@@ -1,3 +1,17 @@
+// Placement
+import 'package:frontend/features/placement/screens/principal_placement_officers_screen.dart';
+import 'package:frontend/features/placement/screens/placement_officer_dashboard_screen.dart';
+import 'package:frontend/features/placement/screens/placement_companies_screen.dart';
+import 'package:frontend/features/placement/screens/placement_drives_screen.dart';
+import 'package:frontend/features/placement/screens/placement_applications_screen.dart';
+import 'package:frontend/features/placement/screens/placement_offers_screen.dart';
+import 'package:frontend/features/placement/screens/placement_reports_screen.dart';
+import 'package:frontend/features/placement/screens/student_placement_screen.dart';
+// Corrections
+import 'package:frontend/features/corrections/screens/correction_center_screen.dart';
+import 'package:frontend/features/corrections/screens/new_correction_request_screen.dart';
+import 'package:frontend/features/corrections/screens/correction_detail_screen.dart';
+import 'package:frontend/features/corrections/screens/correction_review_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +22,7 @@ import 'package:frontend/features/auth/providers/auth_provider.dart';
 import 'package:frontend/features/auth/screens/landing_page.dart';
 import 'package:frontend/features/reports/screens/reports_screen.dart';
 import 'package:frontend/features/auth/screens/login_page.dart';
+import 'package:frontend/features/auth/screens/sign_up_page.dart';
 import 'package:frontend/features/auth/screens/forgot_password_page.dart';
 import 'package:frontend/features/auth/screens/setup_password_screen.dart';
 import 'package:frontend/features/dashboard/screens/dashboard_screen.dart';
@@ -23,6 +38,12 @@ import 'package:frontend/features/fees/screens/fee_structure_create_screen.dart'
 import 'package:frontend/features/fees/screens/student_fee_list_screen.dart';
 import 'package:frontend/features/fees/screens/student_payment_verification_screen.dart';
 import 'package:frontend/features/fees/screens/fee_payment_upload_screen.dart';
+import 'package:frontend/features/fees/screens/accounts_dashboard_screen.dart';
+import 'package:frontend/features/fees/screens/student_fee_management_screen.dart';
+import 'package:frontend/features/fees/screens/record_payment_screen.dart';
+import 'package:frontend/features/fees/screens/fee_reports_screen.dart';
+import 'package:frontend/features/fees/screens/accounts_notifications_screen.dart';
+import 'package:frontend/features/fees/screens/uploaded_payment_files_screen.dart';
 
 // Timetable
 import 'package:frontend/features/timetable/screens/timetable_list_screen.dart';
@@ -30,6 +51,7 @@ import 'package:frontend/features/timetable/screens/timetable_detail_screen.dart
 import 'package:frontend/features/timetable/screens/timetable_create_screen.dart';
 import 'package:frontend/features/timetable/screens/timetable_edit_screen.dart';
 import 'package:frontend/features/timetable/screens/faculty_schedule_screen.dart';
+import 'package:frontend/features/timetable/screens/student_schedule_screen.dart';
 
 // Faculty
 import 'package:frontend/features/faculty/screens/faculty_list_screen.dart';
@@ -44,6 +66,7 @@ import 'package:frontend/features/attendance/screens/mark_attendance_screen.dart
 // Admissions & Students
 import 'package:frontend/features/admissions/screens/student_registration_screen.dart';
 import 'package:frontend/features/admissions/screens/student_list_screen.dart';
+import 'package:frontend/features/admissions/screens/admission_notifications_screen.dart';
 
 // IA Assessment
 import 'package:frontend/features/ia_assessment/screens/ia_marks_screen.dart';
@@ -58,12 +81,22 @@ import 'package:frontend/features/academics/screens/department_screen.dart';
 
 // Attendance Monitoring
 import 'package:frontend/features/attendance/screens/attendance_monitoring_screen.dart';
+import 'package:frontend/features/attendance/screens/extra_class_monitoring_screen.dart';
 
 // HOD IA Performance
 import 'package:frontend/features/ia_assessment/screens/hod_ia_performance_screen.dart';
 
 // HOD Reports
 import 'package:frontend/features/reports/screens/hod_reports_screen.dart';
+
+// Faculty Screens
+import 'package:frontend/features/faculty/screens/faculty_students_screen.dart';
+import 'package:frontend/features/ia_assessment/screens/faculty_ia_assessment_screen.dart';
+import 'package:frontend/features/reports/screens/faculty_reports_screen.dart';
+import 'package:frontend/features/faculty/screens/faculty_give_work_screen.dart';
+import 'package:frontend/features/faculty/screens/student_assignments_screen.dart';
+import 'package:frontend/features/faculty/screens/faculty_lab_batches_screen.dart';
+import 'package:frontend/features/faculty/screens/student_academic_history_screen.dart';
 
 // Announcements
 import 'package:frontend/features/announcements/screens/department_announcements_screen.dart';
@@ -73,7 +106,9 @@ import 'package:frontend/features/announcements/screens/campus_announcements_scr
 import 'package:frontend/features/notifications/screens/notifications_screen.dart';
 import 'package:frontend/features/ia_assessment/screens/student_ia_marks_screen.dart';
 import 'package:frontend/features/students/screens/student_results_screen.dart';
-import 'package:frontend/features/students/screens/student_grievances_screen.dart';
+import 'package:frontend/features/grievances/screens/student_grievances_screen.dart';
+import 'package:frontend/features/grievances/screens/officer_grievance_dashboard.dart';
+import 'package:frontend/features/grievances/providers/grievance_provider.dart';
 import 'package:frontend/features/students/screens/student_academic_status_screen.dart';
 import 'package:frontend/features/library/screens/library_screen.dart';
 import 'package:frontend/features/library/screens/library_officer_dashboard.dart';
@@ -102,8 +137,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return provider.ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
+    return provider.MultiProvider(
+      providers: [
+        provider.ChangeNotifierProvider(create: (_) => AuthProvider()),
+        provider.ChangeNotifierProvider(create: (_) => GrievanceProvider()),
+      ],
       child: MaterialApp.router(
         title: 'CampusFlow',
         debugShowCheckedModeBanner: false,
@@ -124,13 +162,15 @@ class MyApp extends StatelessWidget {
         // Public routes — no auth needed
         if (location == '/' ||
             location == '/login' ||
+            location == '/signup' ||
+            location == '/register' ||
             location == '/forgot-password' ||
             location.startsWith('/setup-password') ||
             location == '/admissions/register' ||
             location == '/fee-upload' ||
             location.startsWith('/fee-upload')) {
           if (loggedIn &&
-              (location == '/login' || location == '/forgot-password')) {
+              (location == '/login' || location == '/signup' || location == '/register' || location == '/forgot-password')) {
             return '/dashboard';
           }
           return null;
@@ -143,6 +183,8 @@ class MyApp extends StatelessWidget {
         // PUBLIC ROUTES (no auth required)
         GoRoute(path: '/', builder: (c, s) => const LandingPage()),
         GoRoute(path: '/login', builder: (c, s) => const LoginPage()),
+        GoRoute(path: '/signup', builder: (c, s) => const SignUpPage()),
+        GoRoute(path: '/register', builder: (c, s) => const SignUpPage()),
         GoRoute(
           path: '/forgot-password',
           builder: (c, s) => const ForgotPasswordPage(),
@@ -171,6 +213,17 @@ class MyApp extends StatelessWidget {
           routes: [
             GoRoute(
               path: '/dashboard',
+              redirect: (context, state) {
+                final auth = provider.Provider.of<AuthProvider>(context, listen: false);
+                final role = (auth.role ?? '').toUpperCase();
+                if (role == AppRoles.accounts) {
+                  return '/fees/dashboard';
+                }
+                if (role == AppRoles.placementOfficer) {
+                  return '/placement/dashboard';
+                }
+                return null;
+              },
               builder: (c, s) => const DashboardScreen(),
             ),
             GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
@@ -203,10 +256,42 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const StudentPaymentVerificationScreen(),
             ),
             GoRoute(
+              path: '/fees/uploaded-files',
+              builder: (c, s) => const UploadedPaymentFilesScreen(),
+            ),
+            GoRoute(
               path: '/fees/pay/:id',
               builder: (c, s) => FeePaymentScreen(
                 feeId: int.parse(s.pathParameters['id']!),
               ),
+            ),
+            GoRoute(
+              path: '/fees/dashboard',
+              builder: (c, s) => const AccountsDashboardScreen(),
+            ),
+            GoRoute(
+              path: '/fees/students',
+              builder: (c, s) => const StudentFeeManagementScreen(),
+            ),
+            GoRoute(
+              path: '/fees/record-payment',
+              builder: (c, s) {
+                final feeIdStr = s.uri.queryParameters['feeId'];
+                final feeId = feeIdStr != null ? int.tryParse(feeIdStr) : null;
+                return RecordPaymentScreen(feeId: feeId);
+              },
+            ),
+            GoRoute(
+              path: '/fees/reports',
+              builder: (c, s) {
+                final tabStr = s.uri.queryParameters['tab'];
+                final tabIndex = tabStr != null ? (int.tryParse(tabStr) ?? 0) : 0;
+                return FeeReportsScreen(initialTab: tabIndex);
+              },
+            ),
+            GoRoute(
+              path: '/fees/notifications',
+              builder: (c, s) => const AccountsNotificationsScreen(),
             ),
             GoRoute(
               path: '/timetable',
@@ -215,6 +300,9 @@ class MyApp extends StatelessWidget {
                 final role = (auth.role ?? '').toUpperCase();
                 if (role == AppRoles.professor) {
                   return '/timetable/my-schedule';
+                }
+                if (role == AppRoles.student) {
+                  return '/timetable/student-schedule';
                 }
                 return '/timetable/list';
               },
@@ -247,6 +335,10 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const FacultyScheduleScreen(),
             ),
             GoRoute(
+              path: '/timetable/student-schedule',
+              builder: (c, s) => const StudentScheduleScreen(),
+            ),
+            GoRoute(
               path: '/faculty',
               redirect: (context, state) => '/faculty/list',
             ),
@@ -271,6 +363,33 @@ class MyApp extends StatelessWidget {
                   FacultyDetailScreen(id: int.parse(s.pathParameters['id']!)),
             ),
             GoRoute(
+              path: '/faculty/students',
+              builder: (c, s) => const FacultyStudentsScreen(),
+            ),
+            GoRoute(
+              path: '/ia/faculty',
+              builder: (c, s) => const FacultyIAAssessmentScreen(),
+            ),
+            GoRoute(
+              path: '/faculty/reports',
+              builder: (c, s) => const FacultyReportsScreen(),
+            ),
+            GoRoute(
+              path: '/faculty/assignments',
+              builder: (c, s) => const FacultyGiveWorkScreen(),
+            ),
+            GoRoute(
+              path: '/faculty/lab-batches',
+              builder: (c, s) => const FacultyLabBatchesScreen(),
+            ),
+            GoRoute(
+              path: '/faculty/academic-history',
+              builder: (c, s) {
+                final search = s.uri.queryParameters['search'];
+                return StudentAcademicHistoryScreen(initialSearch: search);
+              },
+            ),
+            GoRoute(
               path: '/attendance',
               redirect: (c, s) => '/attendance/faculty',
             ),
@@ -281,6 +400,10 @@ class MyApp extends StatelessWidget {
             GoRoute(
               path: '/attendance/monitoring',
               builder: (c, s) => const AttendanceMonitoringScreen(),
+            ),
+            GoRoute(
+              path: '/attendance/extra-class-monitoring',
+              builder: (c, s) => const ExtraClassMonitoringScreen(),
             ),
             GoRoute(
               path: '/attendance/department',
@@ -338,8 +461,23 @@ class MyApp extends StatelessWidget {
               builder: (c, s) => const StudentGrievancesScreen(),
             ),
             GoRoute(
+              path: '/grievances',
+              builder: (c, s) {
+                final auth = provider.Provider.of<AuthProvider>(c, listen: false);
+                final role = (auth.role ?? '').toUpperCase();
+                if (role == AppRoles.student) {
+                  return const StudentGrievancesScreen();
+                }
+                return const OfficerGrievanceDashboard();
+              },
+            ),
+            GoRoute(
               path: '/student/academic-status',
               builder: (c, s) => const StudentAcademicStatusScreen(),
+            ),
+            GoRoute(
+              path: '/student/assignments',
+              builder: (c, s) => const StudentAssignmentsScreen(),
             ),
             GoRoute(
               path: '/ia/create/:subjectId',
@@ -468,7 +606,11 @@ class MyApp extends StatelessWidget {
             ),
             GoRoute(
               path: '/subjects',
-              builder: (c, s) => const SubjectListScreen(),
+              builder: (c, s) => const SubjectListScreen(isDepartmentView: false),
+            ),
+            GoRoute(
+              path: '/subjects/department',
+              builder: (c, s) => const SubjectListScreen(isDepartmentView: true),
             ),
             GoRoute(
               path: '/subjects/add',
@@ -486,6 +628,70 @@ class MyApp extends StatelessWidget {
               path: '/admissions/list',
               builder: (c, s) => const StudentListScreen(),
             ),
+            GoRoute(
+              path: '/admissions/notifications',
+              builder: (c, s) => const AdmissionNotificationsScreen(),
+            ),
+            GoRoute(
+              path: '/student/corrections',
+              builder: (c, s) => const CorrectionCenterScreen(),
+            ),
+            GoRoute(
+              path: '/student/corrections/new',
+              builder: (c, s) => const NewCorrectionRequestScreen(),
+            ),
+            GoRoute(
+              path: '/student/corrections/detail/:id',
+              builder: (c, s) {
+                final id = int.tryParse(s.pathParameters['id'] ?? '') ?? 0;
+                return CorrectionDetailScreen(requestId: id);
+              },
+            ),
+            GoRoute(
+              path: '/corrections/review',
+              builder: (c, s) => const CorrectionReviewScreen(),
+            ),
+
+            // Placement Routes
+            GoRoute(
+              path: '/principal/placement-officers',
+              builder: (c, s) => const PrincipalPlacementOfficersScreen(),
+            ),
+            GoRoute(
+              path: '/placement/dashboard',
+              builder: (c, s) => const PlacementOfficerDashboardScreen(),
+            ),
+            GoRoute(
+              path: '/placement/companies',
+              builder: (c, s) => const PlacementCompaniesScreen(),
+            ),
+            GoRoute(
+              path: '/placement/drives',
+              builder: (c, s) => const PlacementDrivesScreen(),
+            ),
+            GoRoute(
+              path: '/placement/applications',
+              builder: (c, s) => PlacementApplicationsScreen(
+                driveId: int.tryParse(s.uri.queryParameters['drive_id'] ?? ''),
+              ),
+            ),
+            GoRoute(
+              path: '/placement/offers',
+              builder: (c, s) => const PlacementOffersScreen(),
+            ),
+            GoRoute(
+              path: '/placement/reports',
+              builder: (c, s) => const PlacementReportsScreen(),
+            ),
+            GoRoute(
+              path: '/placement/students',
+              builder: (c, s) => const PlacementApplicationsScreen(),
+            ),
+            GoRoute(
+              path: '/student/placement',
+              builder: (c, s) => const StudentPlacementScreen(),
+            ),
+
             
           ],
         ),

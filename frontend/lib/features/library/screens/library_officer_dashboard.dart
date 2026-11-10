@@ -124,15 +124,15 @@ class _LibraryOfficerDashboardState extends State<LibraryOfficerDashboard> {
                   ),
                 )
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(MediaQuery.of(context).size.width < 480 ? 14 : 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Header Section
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Column(
+                      LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          final isNarrow = constraints.maxWidth < 750;
+                          final headerContent = const Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
@@ -145,8 +145,11 @@ class _LibraryOfficerDashboardState extends State<LibraryOfficerDashboard> {
                                 style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
                               ),
                             ],
-                          ),
-                          Row(
+                          );
+
+                          final actionButtons = Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
                             children: [
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
@@ -159,7 +162,6 @@ class _LibraryOfficerDashboardState extends State<LibraryOfficerDashboard> {
                                 icon: const Icon(Icons.add_box_rounded, size: 18),
                                 label: const Text("Add New Book", style: TextStyle(fontWeight: FontWeight.bold)),
                               ),
-                              const SizedBox(width: 12),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF059669),
@@ -172,8 +174,28 @@ class _LibraryOfficerDashboardState extends State<LibraryOfficerDashboard> {
                                 label: const Text("Issue Book", style: TextStyle(fontWeight: FontWeight.bold)),
                               ),
                             ],
-                          ),
-                        ],
+                          );
+
+                          if (isNarrow) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                headerContent,
+                                const SizedBox(height: 14),
+                                actionButtons,
+                              ],
+                            );
+                          } else {
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(child: headerContent),
+                                const SizedBox(width: 16),
+                                actionButtons,
+                              ],
+                            );
+                          }
+                        },
                       ),
                       const SizedBox(height: 24),
 

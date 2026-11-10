@@ -11,6 +11,10 @@ class FacultyRegistrationModel {
   final int departmentId;
   final String qualification;
   final String role;
+  final String? designation;
+  final String? employmentType;
+  final bool isGuestFaculty;
+  final String? dateOfJoining;
   
   // CHANGED: Use XFile instead of String path
   final XFile? photoFile; 
@@ -26,6 +30,10 @@ class FacultyRegistrationModel {
     required this.departmentId,
     required this.qualification,
     required this.role,
+    this.designation,
+    this.employmentType = 'PERMANENT',
+    this.isGuestFaculty = false,
+    this.dateOfJoining,
     this.photoFile,
   });
 
@@ -41,6 +49,10 @@ class FacultyRegistrationModel {
       'department': departmentId,
       'qualification': qualification,
       'role': role,
+      'designation': designation ?? (isGuestFaculty ? 'Guest Faculty' : 'Professor'),
+      'employment_type': employmentType ?? (isGuestFaculty ? 'GUEST' : 'PERMANENT'),
+      'is_guest_faculty': isGuestFaculty,
+      if (dateOfJoining != null && dateOfJoining!.isNotEmpty) 'date_of_joining': dateOfJoining,
     };
   }
 }
@@ -75,6 +87,13 @@ class Faculty {
   final String? address;
   final int? departmentId;
   final String? gender;
+  final String? designation;
+  final String? employmentType;
+  final bool isGuestFaculty;
+  final String? dateOfJoining;
+  final String? tempPassword;
+  final String? passwordSetupStatus;
+  final String? passwordSetupCompletedAt;
 
   Faculty({
     required this.id,
@@ -91,6 +110,13 @@ class Faculty {
     this.address,
     this.departmentId,
     this.gender,
+    this.designation,
+    this.employmentType = 'PERMANENT',
+    this.isGuestFaculty = false,
+    this.dateOfJoining,
+    this.tempPassword,
+    this.passwordSetupStatus,
+    this.passwordSetupCompletedAt,
   });
 
   factory Faculty.fromMap(Map<String, dynamic> map) {
@@ -107,6 +133,9 @@ class Faculty {
         (map['department'] is Map ? map['department']['name'] : null) ?? 
         map['department']?.toString() ?? '';
 
+    final isGuest = map['is_guest_faculty'] == true ||
+        (map['employment_type']?.toString().toUpperCase() == 'GUEST');
+
     return Faculty(
       id: map['id'],
       facultyId: map['faculty_id'] ?? '',
@@ -122,6 +151,13 @@ class Faculty {
       address: map['address'],
       departmentId: parsedDeptId,
       gender: map['gender'],
+      designation: map['designation']?.toString() ?? (isGuest ? 'Guest Faculty' : 'Professor'),
+      employmentType: map['employment_type'] ?? (isGuest ? 'GUEST' : 'PERMANENT'),
+      isGuestFaculty: isGuest,
+      dateOfJoining: map['date_of_joining'],
+      tempPassword: map['temp_password'] ?? map['temporary_password'],
+      passwordSetupStatus: map['password_setup_status'],
+      passwordSetupCompletedAt: map['password_setup_completed_at'],
     );
   }
 }

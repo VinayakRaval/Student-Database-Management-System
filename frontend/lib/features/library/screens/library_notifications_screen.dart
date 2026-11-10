@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/providers/notification_count_manager.dart';
 
 class LibraryNotificationsScreen extends StatefulWidget {
   const LibraryNotificationsScreen({super.key});
@@ -111,6 +112,8 @@ class _LibraryNotificationsScreenState extends State<LibraryNotificationsScreen>
           _notifications = items;
           _isLoading = false;
         });
+        final unread = items.where((n) => n['is_read'] != true).length;
+        NotificationCountManager.instance.setCount(unread);
       }
     } catch (e) {
       if (mounted) {

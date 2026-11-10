@@ -1,6 +1,8 @@
 // lib/features/admissions/screens/student_registration_screen.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -10,9 +12,37 @@ import 'package:frontend/features/admissions/providers/admission_provider.dart';
 import 'dart:typed_data';
 import 'package:frontend/core/widgets/photo_upload_card.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/utils/validation_utils.dart';
 import 'package:provider/provider.dart' as p;
 import 'package:frontend/features/auth/providers/auth_provider.dart';
 import 'package:frontend/core/constants/api_constants.dart';
+
+class CustomDetailEntry {
+  final TextEditingController keyCtrl;
+  final TextEditingController valueCtrl;
+
+  CustomDetailEntry({String key = '', String value = ''})
+      : keyCtrl = TextEditingController(text: key),
+        valueCtrl = TextEditingController(text: value);
+
+  void dispose() {
+    keyCtrl.dispose();
+    valueCtrl.dispose();
+  }
+}
+
+class CustomUploadEntry {
+  final TextEditingController titleCtrl;
+  Uint8List? bytes;
+  String? fileName;
+
+  CustomUploadEntry({String title = ''})
+      : titleCtrl = TextEditingController(text: title);
+
+  void dispose() {
+    titleCtrl.dispose();
+  }
+}
 
 class StudentRegistrationScreen extends ConsumerStatefulWidget {
   final int startPage;
@@ -31,7 +61,7 @@ class _StudentRegistrationScreenState
   String? _selectedSeatType;
 
   bool _otpSent = false;
-  bool _otpVerified = false;
+  bool _otpVerified = true;
   bool _sendingOtp = false;
   final _otpCtrl = TextEditingController();
 
@@ -95,6 +125,12 @@ class _StudentRegistrationScreenState
   int? _selectedSemId;
   int? _selectedYearId;
   bool _isSubmitting = false;
+  bool _hasSubmitted = false;
+
+  final List<CustomDetailEntry> _customPersonalDetails = [];
+  final List<CustomUploadEntry> _customDocuments = [];
+  final FocusNode _phoneFocusNode = FocusNode();
+  final FocusNode _emailFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -104,6 +140,32 @@ class _StudentRegistrationScreenState
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _pageController.jumpToPage(_currentPage),
     );
+
+    _phoneFocusNode.addListener(() {
+      if (!_phoneFocusNode.hasFocus && _phoneCtrl.text.trim().isNotEmpty) {
+        final err = ValidationUtils.validatePhone(_phoneCtrl.text.trim());
+        if (err != null) {
+          ValidationUtils.showValidationPopup(
+            context,
+            title: "Invalid Phone Number",
+            message: err,
+          );
+        }
+      }
+    });
+
+    _emailFocusNode.addListener(() {
+      if (!_emailFocusNode.hasFocus && _emailCtrl.text.trim().isNotEmpty) {
+        final err = ValidationUtils.validateEmail(_emailCtrl.text.trim());
+        if (err != null) {
+          ValidationUtils.showValidationPopup(
+            context,
+            title: "Invalid Email Address",
+            message: err,
+          );
+        }
+      }
+    });
   }
 
   @override
@@ -142,6 +204,14 @@ class _StudentRegistrationScreenState
     _dipYearCtrl.dispose();
     _dipObtCtrl.dispose();
     _dipMaxCtrl.dispose();
+    for (var d in _customPersonalDetails) {
+      d.dispose();
+    }
+    for (var doc in _customDocuments) {
+      doc.dispose();
+    }
+    _phoneFocusNode.dispose();
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
@@ -194,9 +264,27 @@ class _StudentRegistrationScreenState
         );
         return;
       }
+      final phoneError = ValidationUtils.validatePhone(_phoneCtrl.text.trim());
+      if (phoneError != null) {
+        ValidationUtils.showValidationPopup(
+          context,
+          title: "Invalid Phone Number",
+          message: phoneError,
+        );
+        return;
+      }
       if (_emailCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please enter Email Address"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      final emailError = ValidationUtils.validateEmail(_emailCtrl.text.trim());
+      if (emailError != null) {
+        ValidationUtils.showValidationPopup(
+          context,
+          title: "Invalid Email Address",
+          message: emailError,
         );
         return;
       }
@@ -330,13 +418,18 @@ class _StudentRegistrationScreenState
 
   void _submit() async {
     if (_isSubmitting) return;
+    setState(() => _hasSubmitted = true);
 
     // 1. Personal details validation (Page 1)
-    if (_nameCtrl.text.trim().isEmpty) {
+    if (_nameCtrl.text.trim().isEmpty ||
+        _cetNoCtrl.text.trim().isEmpty ||
+        _dobCtrl.text.trim().isEmpty ||
+        _fatherCtrl.text.trim().isEmpty ||
+        _motherCtrl.text.trim().isEmpty ||
+        _phoneCtrl.text.trim().isEmpty ||
+        _emailCtrl.text.trim().isEmpty) {
       _goToPage(0);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter Student Name"), backgroundColor: Colors.red),
-      );
+      ValidationUtils.showValidationErrorSnackBar(context);
       return;
     }
     if (_cetNoCtrl.text.trim().isEmpty) {
@@ -367,17 +460,40 @@ class _StudentRegistrationScreenState
       );
       return;
     }
-    if (_phoneCtrl.text.trim().isEmpty) {
+    final phone = _phoneCtrl.text.trim();
+    if (phone.isEmpty) {
       _goToPage(0);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please enter Mobile Number"), backgroundColor: Colors.red),
       );
       return;
     }
-    if (_emailCtrl.text.trim().isEmpty) {
+    final phoneError = ValidationUtils.validatePhone(phone);
+    if (phoneError != null) {
+      _goToPage(0);
+      ValidationUtils.showValidationPopup(
+        context,
+        title: "Invalid Phone Number",
+        message: phoneError,
+      );
+      return;
+    }
+
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
       _goToPage(0);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please enter Email Address"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final emailError = ValidationUtils.validateEmail(email);
+    if (emailError != null) {
+      _goToPage(0);
+      ValidationUtils.showValidationPopup(
+        context,
+        title: "Invalid Email Address",
+        message: emailError,
       );
       return;
     }
@@ -519,6 +635,18 @@ class _StudentRegistrationScreenState
         "academic_year_id": _selectedYearId,
       };
 
+      final Map<String, String> customPersonalMap = {};
+      for (var entry in _customPersonalDetails) {
+        final k = entry.keyCtrl.text.trim();
+        final v = entry.valueCtrl.text.trim();
+        if (k.isNotEmpty && v.isNotEmpty) {
+          customPersonalMap[k] = v;
+        }
+      }
+      if (customPersonalMap.isNotEmpty) {
+        formMap["custom_personal_details"] = jsonEncode(customPersonalMap);
+      }
+
       final attachments = <String, Uint8List?>{
         "photo": studentPhoto,
         "signature": studentSignature,
@@ -532,6 +660,24 @@ class _StudentRegistrationScreenState
         "study_certificate": studyCertificate,
       };
 
+      final List<Map<String, String>> customDocsMeta = [];
+      for (int i = 0; i < _customDocuments.length; i++) {
+        final doc = _customDocuments[i];
+        final title = doc.titleCtrl.text.trim().isEmpty ? "Custom Document ${i + 1}" : doc.titleCtrl.text.trim();
+        if (doc.bytes != null && doc.bytes!.isNotEmpty) {
+          final fileKey = "custom_doc_file_$i";
+          attachments[fileKey] = doc.bytes;
+          formMap["${fileKey}_title"] = title;
+          customDocsMeta.add({
+            "title": title,
+            "file_name": doc.fileName ?? "$fileKey.png",
+          });
+        }
+      }
+      if (customDocsMeta.isNotEmpty) {
+        formMap["custom_documents"] = jsonEncode(customDocsMeta);
+      }
+
       final success = await ref
           .read(admissionProvider.notifier)
           .registerStudentFromMap(formMap, attachments: attachments);
@@ -540,17 +686,136 @@ class _StudentRegistrationScreenState
 
       if (success != null) {
         final auth = p.Provider.of<AuthProvider>(context, listen: false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Student Registration Successful! Password invitation dispatched to ${_emailCtrl.text.trim()}."),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-        if (auth.isLoggedIn) {
-          context.go('/admissions/list');
+        final tempPassword = ref.read(admissionProvider).temporaryPassword;
+
+        if (tempPassword != null && tempPassword.isNotEmpty) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 28),
+                  SizedBox(width: 10),
+                  Text("Student Registered!", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Student registered successfully for ${_nameCtrl.text.trim()} (CET/Reg: ${_cetNoCtrl.text.trim()}).",
+                    style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Generated Initial Temporary Password:",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        SelectableText(
+                          tempPassword,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                            color: Color(0xFF13246E),
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded, size: 20, color: Color(0xFF13246E)),
+                          tooltip: "Copy Password",
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: tempPassword));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Temporary password copied to clipboard!"),
+                                backgroundColor: Color(0xFF13246E),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFCD34D)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Icon(Icons.security_rounded, size: 18, color: Color(0xFF92400E)),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Important Security Notice: Please share this temporary password securely with the student. They will be required to change it upon their first login.",
+                            style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: tempPassword));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Temporary password copied to clipboard!"),
+                        backgroundColor: Color(0xFF13246E),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text("Copy Password"),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF13246E)),
+                  child: const Text("Close", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
         } else {
-          context.go('/login');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Student Registration Successful!"),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+
+        if (context.mounted) {
+          if (auth.isLoggedIn) {
+            context.go('/admissions/list');
+          } else {
+            context.go('/login');
+          }
         }
       } else {
         final error = ref.read(admissionProvider).errorMessage;
@@ -624,14 +889,20 @@ class _StudentRegistrationScreenState
             borderRadius: BorderRadius.circular(20),
           ),
           padding: const EdgeInsets.all(30),
-          child: PageView(
-            controller: _pageController,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              _buildPage1(context),
-              _buildPage2(context),
-              _buildPage3(context),
-            ],
+          child: CallbackShortcuts(
+            bindings: <ShortcutActivator, VoidCallback>{
+              const SingleActivator(LogicalKeyboardKey.enter): _submit,
+              const SingleActivator(LogicalKeyboardKey.numpadEnter): _submit,
+            },
+            child: PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildPage1(context),
+                _buildPage2(context),
+                _buildPage3(context),
+              ],
+            ),
           ),
         ),
       ),
@@ -682,8 +953,20 @@ class _StudentRegistrationScreenState
                           _buildLabelRow("Father's Name", _fatherCtrl, isRequired: true),
                           _buildLabelRow("Mother's Name", _motherCtrl, isRequired: true),
                           _buildLabelRow("Parent Occupation", _parentOccCtrl, isRequired: true),
-                          _buildLabelRow("Phone", _phoneCtrl, isRequired: true),
-                          _buildLabelRow("Email-ID", _emailCtrl, isRequired: true),
+                          _buildLabelRow(
+                            "Phone",
+                            _phoneCtrl,
+                            isRequired: true,
+                            focusNode: _phoneFocusNode,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          _buildLabelRow(
+                            "Email-ID",
+                            _emailCtrl,
+                            isRequired: true,
+                            focusNode: _emailFocusNode,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
                           if (!_otpVerified)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -809,6 +1092,8 @@ class _StudentRegistrationScreenState
                     ),
                   ],
                 ),
+                const SizedBox(height: 20),
+                _buildCustomPersonalDetailsSection(),
               ],
             ),
           ),
@@ -1465,6 +1750,8 @@ class _StudentRegistrationScreenState
                     ),
                   ],
                 ),
+                const SizedBox(height: 24),
+                _buildCustomDocumentsSection(),
                 const SizedBox(height: 30),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -1520,53 +1807,88 @@ class _StudentRegistrationScreenState
     TextEditingController controller, {
     bool isDate = false,
     bool isRequired = false,
+    FocusNode? focusNode,
+    TextInputType? keyboardType,
   }) {
+    final bool showError = _hasSubmitted && isRequired && controller.text.trim().isEmpty;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 140,
-            child: RichText(
-              text: TextSpan(
-                text: label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black,
-                ),
-                children: isRequired
-                    ? [
-                        const TextSpan(
-                          text: " *",
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: RichText(
+                text: TextSpan(
+                  text: label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
+                  ),
+                  children: isRequired
+                      ? [
+                          const TextSpan(
+                            text: " *",
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ]
-                    : [],
+                        ]
+                      : [],
+                ),
               ),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: SizedBox(
-              height: 35,
-              child: TextField(
-                controller: controller,
-                readOnly: isDate,
-                onTap: isDate ? () => _selectDate(controller) : null,
-                decoration: InputDecoration(
-                  fillColor: Colors.white,
-                  filled: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(5),
-                    borderSide: BorderSide.none,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 35,
+                  child: TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    keyboardType: keyboardType,
+                    readOnly: isDate,
+                    onTap: isDate ? () => _selectDate(controller) : null,
+                    onChanged: (_) {
+                      if (_hasSubmitted) setState(() {});
+                    },
+                    onSubmitted: (_) => _submit(),
+                    decoration: InputDecoration(
+                      fillColor: Colors.white,
+                      filled: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: showError ? const BorderSide(color: Colors.red, width: 1.5) : BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: showError ? const BorderSide(color: Colors.red, width: 1.5) : BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: showError ? const BorderSide(color: Colors.red, width: 1.5) : const BorderSide(color: Color(0xFF13246E), width: 1.5),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                if (showError)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4, left: 2),
+                    child: Text(
+                      "This field is mandatory.",
+                      style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -1636,4 +1958,276 @@ class _StudentRegistrationScreenState
       ),
     ),
   );
+
+  Widget _buildCustomPersonalDetailsSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(top: 10, bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF13246E).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.add_task_rounded, color: Color(0xFF13246E), size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    "Custom Personal Details",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _customPersonalDetails.add(CustomDetailEntry());
+                  });
+                },
+                icon: const Icon(Icons.add, size: 16, color: Color(0xFF13246E)),
+                label: const Text(
+                  "Add Custom Field",
+                  style: TextStyle(color: Color(0xFF13246E), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF13246E)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+          if (_customPersonalDetails.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                "No custom personal details added yet. Click '+ Add Custom Field' to include additional details such as Aadhaar Number, Blood Group, Guardian Contact, Emergency Phone, etc.",
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+              ),
+            ),
+          if (_customPersonalDetails.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _customPersonalDetails.length,
+              separatorBuilder: (context, _) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final entry = _customPersonalDetails[index];
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: TextField(
+                          controller: entry.keyCtrl,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: "Field Name (e.g. Aadhaar No)",
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: TextField(
+                          controller: entry.valueCtrl,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: "Field Value",
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                      tooltip: "Remove Field",
+                      onPressed: () {
+                        setState(() {
+                          final removed = _customPersonalDetails.removeAt(index);
+                          removed.dispose();
+                        });
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomDocumentsSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(top: 10, bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF13246E).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.file_upload_outlined, color: Color(0xFF13246E), size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    "Custom Documents & Uploads",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _customDocuments.add(CustomUploadEntry());
+                  });
+                },
+                icon: const Icon(Icons.add, size: 16, color: Color(0xFF13246E)),
+                label: const Text(
+                  "Add Custom Document",
+                  style: TextStyle(color: Color(0xFF13246E), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF13246E)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+          if (_customDocuments.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                "No custom documents added yet. Click '+ Add Custom Document' to upload additional files (e.g. Income Certificate, Transfer Certificate, Migration Certificate).",
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+              ),
+            ),
+          if (_customDocuments.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 18,
+              runSpacing: 18,
+              children: _customDocuments.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final doc = entry.value;
+                return Container(
+                  width: 170,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: doc.titleCtrl,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              decoration: const InputDecoration(
+                                hintText: "Document Title",
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 4),
+                                border: UnderlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                final removed = _customDocuments.removeAt(idx);
+                                removed.dispose();
+                              });
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(2.0),
+                              child: Icon(Icons.close, size: 16, color: Colors.redAccent),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      PhotoUploadCard(
+                        title: doc.titleCtrl.text.trim().isEmpty ? "Upload File" : doc.titleCtrl.text.trim(),
+                        initialBytes: doc.bytes,
+                        fileName: doc.fileName,
+                        onChanged: (b, n) {
+                          setState(() {
+                            doc.bytes = b;
+                            doc.fileName = n;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

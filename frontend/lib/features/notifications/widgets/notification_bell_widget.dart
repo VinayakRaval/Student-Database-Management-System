@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/providers/notification_count_manager.dart';
 import '../models/notification_model.dart';
 
 class NotificationBellWidget extends StatefulWidget {
@@ -13,49 +13,21 @@ class NotificationBellWidget extends StatefulWidget {
 }
 
 class _NotificationBellWidgetState extends State<NotificationBellWidget> {
-  int _unreadCount = 0;
-  Timer? _timer;
-
   @override
   void initState() {
     super.initState();
-    _fetchUnreadCount();
-    _timer = Timer.periodic(const Duration(seconds: 40), (_) {
-      if (mounted) _fetchUnreadCount();
-    });
+    NotificationCountManager.instance.addListener(_onCountChanged);
+    NotificationCountManager.instance.refresh();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    NotificationCountManager.instance.removeListener(_onCountChanged);
     super.dispose();
   }
 
-  Future<void> _fetchUnreadCount() async {
-    try {
-      final dio = ApiClient().dio;
-      final res = await dio.get('/announcements/notifications/unread_count/');
-      int count = 0;
-      if (res.data is Map && res.data['unread_count'] != null) {
-        count = (res.data['unread_count'] as num).toInt();
-      }
-
-      // Also check active announcements count if needed
-      try {
-        final annRes = await dio.get('/announcements/');
-        final dynamic raw = annRes.data;
-        final List list = raw is List ? raw : (raw is Map && raw['results'] is List ? raw['results'] : []);
-        if (count == 0 && list.isNotEmpty) {
-          count = list.length;
-        }
-      } catch (_) {}
-
-      if (mounted) {
-        setState(() {
-          _unreadCount = count;
-        });
-      }
-    } catch (_) {}
+  void _onCountChanged() {
+    if (mounted) setState(() {});
   }
 
   void _showNotificationPanel() {
@@ -71,7 +43,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
           child: NotificationPanelSheet(
             isDesktopPopup: false,
             onUnreadChanged: (newCount) {
-              if (mounted) setState(() => _unreadCount = newCount);
+              NotificationCountManager.instance.setCount(newCount);
             },
           ),
         ),
@@ -105,7 +77,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
                   child: NotificationPanelSheet(
                     isDesktopPopup: true,
                     onUnreadChanged: (newCount) {
-                      if (mounted) setState(() => _unreadCount = newCount);
+                      NotificationCountManager.instance.setCount(newCount);
                     },
                   ),
                 ),
@@ -119,6 +91,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final count = NotificationCountManager.instance.unreadCount;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -127,7 +100,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
           tooltip: "Notifications & Announcements",
           onPressed: _showNotificationPanel,
         ),
-        if (_unreadCount > 0)
+        if (count > 0)
           Positioned(
             right: 6,
             top: 6,
@@ -139,7 +112,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
               ),
               constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
               child: Text(
-                _unreadCount > 99 ? '99+' : '$_unreadCount',
+                count > 99 ? '99+' : '$count',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 10,

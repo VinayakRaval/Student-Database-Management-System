@@ -37,24 +37,40 @@ class FeeComponentInput {
 
 class FeeStructure {
   final int id;
+  final int? departmentId;
   final String department;
+  final int? academicYearId;
   final String academicYear;
+  final int? semesterId;
   final String semester;
   final String seatType;
+  final String? title;
+  final String? description;
   final double totalAmount;
   final String status;
-  final String? remarks; // <--- NEW FIELD
+  final String? remarks;
+  final String? bookletNo;
+  final String? receiptNo;
+  final String? receiptDate;
   final List<FeeComponentInput> components;
 
   FeeStructure({
     required this.id,
+    this.departmentId,
     required this.department,
+    this.academicYearId,
     required this.academicYear,
+    this.semesterId,
     required this.semester,
     required this.seatType,
+    this.title,
+    this.description,
     required this.totalAmount,
     required this.status,
-    this.remarks, // <--- Add to constructor
+    this.remarks,
+    this.bookletNo,
+    this.receiptNo,
+    this.receiptDate,
     this.components = const [],
   });
 
@@ -69,13 +85,27 @@ class FeeStructure {
   factory FeeStructure.fromJson(Map<String, dynamic> json) {
     return FeeStructure(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
+      departmentId: json['department'] is int
+          ? json['department']
+          : int.tryParse(json['department']?.toString() ?? ''),
       department: json['department_name'] ?? json['department']?.toString() ?? 'Unknown Dept',
+      academicYearId: json['academic_year'] is int
+          ? json['academic_year']
+          : int.tryParse(json['academic_year']?.toString() ?? ''),
       academicYear: json['academic_year_name'] ?? json['academic_year']?.toString() ?? '',
+      semesterId: json['semester'] is int
+          ? json['semester']
+          : int.tryParse(json['semester']?.toString() ?? ''),
       semester: json['semester_name'] ?? (json['semester'] != null ? "Semester ${json['semester']}" : 'N/A'),
       seatType: json['seat_type']?.toString().toUpperCase() ?? 'N/A',
+      title: json['title']?.toString(),
+      description: json['description']?.toString(),
       totalAmount: double.tryParse(json['total_amount']?.toString() ?? '0') ?? 0.0,
       status: json['approval_status'] ?? 'pending',
       remarks: json['rejection_remark'] ?? json['remark'],
+      bookletNo: json['booklet_no']?.toString(),
+      receiptNo: json['formatted_receipt_no']?.toString(),
+      receiptDate: json['receipt_date']?.toString(),
       components: (json['components'] as List?)
           ?.map((e) => FeeComponentInput(
                 name: e['name']?.toString() ?? '',

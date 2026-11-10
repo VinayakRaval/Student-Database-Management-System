@@ -1,8 +1,8 @@
 import random
-from django.core.mail import send_mail
+# Email service removed in favor of in-app password management
 from .models import CustomUser
 from django.template.loader import render_to_string
-from django.core.mail import EmailMultiAlternatives
+# EmailMultiAlternatives removed
 from django.utils.html import strip_tags
 from datetime import datetime
 
@@ -18,6 +18,27 @@ def get_user_by_identifier(identifier):
     identifier = str(identifier).strip()
     if "@" in identifier:
         user = CustomUser.objects.filter(email__iexact=identifier).first()
+        if not user:
+            try:
+                from students.models import Student
+                stu = Student.objects.filter(email__iexact=identifier).select_related('user').first()
+                if stu and stu.user:
+                    user = stu.user
+            except Exception:
+                pass
+        if not user:
+            try:
+                from faculty.models import Faculty
+                for f in Faculty.objects.all():
+                    try:
+                        if f.email and f.email.strip().lower() == identifier.lower():
+                            if f.user:
+                                user = f.user
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
     elif identifier.isdigit():
         user = CustomUser.objects.filter(phone__iexact=identifier).first()
         if not user:
@@ -55,30 +76,7 @@ def get_user_by_identifier(identifier):
 
 
 def send_otp_email(user, otp, subject="Password Reset Verification"):
-    if not user or not user.email:
-        return False
-
-    context = {
-        "OTP": otp,
-        "YEAR": datetime.now().year,
-        "USER": user
-    }
-
-    html_message = render_to_string("email/otp_template.html", context)
-    plain_message = strip_tags(html_message)
-
-    msg = EmailMultiAlternatives(
-        subject=subject,
-        body=plain_message,
-        from_email="noreply@college.edu",
-        to=[user.email],
-    )
-
-    msg.attach_alternative(html_message, "text/html")
-
-    try:
-        msg.send()
-        return True
-    except Exception as e:
-        print("Email sending failed:", e)
-        return False
+    """
+    Deprecated email stub. Email delivery has been deactivated in SDMS.
+    """
+    return True

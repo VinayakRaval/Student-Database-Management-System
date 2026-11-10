@@ -1,0 +1,31 @@
+# Python & Django
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+*.dump
+db.sqlite3
+db.sqlite3-journal
+
+# Environment variables & secrets (CRITICAL: NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Static & Media
+staticfiles/
+media/
+!media/.gitkeep
+
+# Logs & temp
+*.log
+local_settings.py
+.DS_Store

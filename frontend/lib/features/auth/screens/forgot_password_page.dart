@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
 import 'package:frontend/features/auth/screens/login_page.dart';
+import 'package:frontend/core/utils/validation_utils.dart';
 
 const _primary = Color(0xFF0D2158);
 const _primaryDark = Color(0xFF0A1628);
@@ -28,6 +29,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _newPassCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
 
+  final _emailFocus = FocusNode();
+  final _otpFocus = FocusNode();
+  final _newPassFocus = FocusNode();
+  final _confirmFocus = FocusNode();
+
   bool _isOtpSent = false;
   bool _isSuccess = false;
   bool _isLoading = false;
@@ -40,7 +46,84 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     _otpCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmCtrl.dispose();
+    _emailFocus.dispose();
+    _otpFocus.dispose();
+    _newPassFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleSendOtp() async {
+    if (_isLoading) return; // Prevent duplicate submissions
+    final emailText = _emailCtrl.text.trim();
+    if (emailText.isEmpty) {
+      _snack('Please enter your email', error: true);
+      _emailFocus.requestFocus();
+      return;
+    }
+    final emailErr = ValidationUtils.validateEmail(emailText);
+    if (emailErr != null) {
+      ValidationUtils.showValidationPopup(
+        context,
+        title: 'Invalid Email Address',
+        message: emailErr,
+      );
+      _emailFocus.requestFocus();
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    setState(() => _isLoading = true);
+    final res = await auth.sendResetOtp(emailText);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (res['success']) {
+      setState(() => _isOtpSent = true);
+      _snack('OTP sent to ${_emailCtrl.text.trim()}');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _otpFocus.requestFocus();
+      });
+    } else {
+      _snack(
+        res['message'] ?? 'Failed to send OTP',
+        error: true,
+      );
+    }
+  }
+
+  Future<void> _handleResetPassword() async {
+    if (_isLoading) return; // Prevent duplicate submissions
+    if (_otpCtrl.text.length != 6) {
+      _snack('Enter the 6-digit OTP', error: true);
+      _otpFocus.requestFocus();
+      return;
+    }
+    if (_newPassCtrl.text.isEmpty) {
+      _snack('Enter a new password', error: true);
+      _newPassFocus.requestFocus();
+      return;
+    }
+    if (_newPassCtrl.text != _confirmCtrl.text) {
+      _snack('Passwords do not match', error: true);
+      _confirmFocus.requestFocus();
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    setState(() => _isLoading = true);
+    final res = await auth.verifyAndReset(
+      _emailCtrl.text.trim(),
+      _otpCtrl.text.trim(),
+      _newPassCtrl.text.trim(),
+    );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (res['success']) {
+      setState(() => _isSuccess = true);
+    } else {
+      _snack(
+        res['message'] ?? 'Reset failed',
+        error: true,
+      );
+    }
   }
 
   void _snack(String msg, {bool error = false}) {
@@ -245,227 +328,206 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }
 
   Widget _buildStep1(AuthProvider auth, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Email Address'),
-        const SizedBox(height: 8),
-        _buildTextField(
-          controller: _emailCtrl,
-          hint: 'Enter your registered email',
-          icon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 28),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: _isLoading
-              ? _loadingButton()
-              : ElevatedButton(
-                  onPressed: () async {
-                    if (_emailCtrl.text.trim().isEmpty) {
-                      _snack('Please enter your email', error: true);
-                      return;
-                    }
-                    setState(() => _isLoading = true);
-                    final res = await auth.sendResetOtp(_emailCtrl.text.trim());
-                    setState(() => _isLoading = false);
-                    if (res['success']) {
-                      setState(() => _isOtpSent = true);
-                      _snack('OTP sent to ${_emailCtrl.text.trim()}');
-                    } else {
-                      _snack(
-                        res['message'] ?? 'Failed to send OTP',
-                        error: true,
-                      );
-                    }
-                  },
-                  style: _primaryButtonStyle(),
-                  child: const Text(
-                    'Send OTP',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.enter): _handleSendOtp,
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): _handleSendOtp,
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabel('Email Address'),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _emailCtrl,
+            focusNode: _emailFocus,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _handleSendOtp(),
+            hint: 'Enter your registered email',
+            icon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: _isLoading
+                ? _loadingButton()
+                : ElevatedButton(
+                    onPressed: _handleSendOtp,
+                    style: _primaryButtonStyle(),
+                    child: const Text(
+                      'Send OTP',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
                   ),
-                ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildStep2(AuthProvider auth, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Email info
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(12),
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.enter): _handleResetPassword,
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): _handleResetPassword,
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Email info
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: _primary, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'OTP sent to ${_emailCtrl.text.trim()}',
+                    style: const TextStyle(color: _textSecondary, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: Row(
+          const SizedBox(height: 24),
+
+          _buildLabel('6-Digit OTP'),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _otpCtrl,
+            focusNode: _otpFocus,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) => _newPassFocus.requestFocus(),
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(6),
+            ],
+            style: const TextStyle(
+              fontSize: 18,
+              color: _primary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 4,
+            ),
+            textAlign: TextAlign.center,
+            decoration: _inputDecoration(
+              hint: '------',
+              icon: Icons.pin_outlined,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          _buildLabel('New Password'),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _newPassCtrl,
+            focusNode: _newPassFocus,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) => _confirmFocus.requestFocus(),
+            hint: 'Enter new password',
+            icon: Icons.lock_outline,
+            obscure: _obscureNew,
+            suffix: IconButton(
+              icon: Icon(
+                _obscureNew
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: _hint,
+                size: 20,
+              ),
+              onPressed: () => setState(() => _obscureNew = !_obscureNew),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          _buildLabel('Confirm Password'),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _confirmCtrl,
+            focusNode: _confirmFocus,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _handleResetPassword(),
+            hint: 'Re-enter new password',
+            icon: Icons.lock_reset_outlined,
+            obscure: _obscureConf,
+            suffix: IconButton(
+              icon: Icon(
+                _obscureConf
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: _hint,
+                size: 20,
+              ),
+              onPressed: () => setState(() => _obscureConf = !_obscureConf),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          Row(
             children: [
-              const Icon(Icons.info_outline, color: _primary, size: 18),
-              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  'OTP sent to ${_emailCtrl.text.trim()}',
-                  style: const TextStyle(color: _textSecondary, fontSize: 12),
+                child: OutlinedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                          setState(() => _isLoading = true);
+                          final res = await auth.sendResetOtp(
+                            _emailCtrl.text.trim(),
+                          );
+                          setState(() => _isLoading = false);
+                          _snack(
+                            res['success'] ? 'OTP resent' : 'Failed to resend',
+                            error: !res['success'],
+                          );
+                        },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _primary,
+                    side: BorderSide(
+                      color: _primary.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text(
+                    'Resend',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 52,
+                  child: _isLoading
+                      ? _loadingButton()
+                      : ElevatedButton(
+                          onPressed: _handleResetPassword,
+                          style: _primaryButtonStyle(),
+                          child: const Text(
+                            'Reset Password',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 24),
-
-        _buildLabel('6-Digit OTP'),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: _otpCtrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(6),
-          ],
-          style: const TextStyle(
-            fontSize: 18,
-            color: _primary,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 4,
-          ),
-          textAlign: TextAlign.center,
-          decoration: _inputDecoration(
-            hint: '------',
-            icon: Icons.pin_outlined,
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        _buildLabel('New Password'),
-        const SizedBox(height: 8),
-        _buildTextField(
-          controller: _newPassCtrl,
-          hint: 'Enter new password',
-          icon: Icons.lock_outline,
-          obscure: _obscureNew,
-          suffix: IconButton(
-            icon: Icon(
-              _obscureNew
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: _hint,
-              size: 20,
-            ),
-            onPressed: () => setState(() => _obscureNew = !_obscureNew),
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        _buildLabel('Confirm Password'),
-        const SizedBox(height: 8),
-        _buildTextField(
-          controller: _confirmCtrl,
-          hint: 'Re-enter new password',
-          icon: Icons.lock_reset_outlined,
-          obscure: _obscureConf,
-          suffix: IconButton(
-            icon: Icon(
-              _obscureConf
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: _hint,
-              size: 20,
-            ),
-            onPressed: () => setState(() => _obscureConf = !_obscureConf),
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _isLoading
-                    ? null
-                    : () async {
-                        setState(() => _isLoading = true);
-                        final res = await auth.sendResetOtp(
-                          _emailCtrl.text.trim(),
-                        );
-                        setState(() => _isLoading = false);
-                        _snack(
-                          res['success'] ? 'OTP resent' : 'Failed to resend',
-                          error: !res['success'],
-                        );
-                      },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _primary,
-                  side: BorderSide(
-                    color: _primary.withValues(alpha: 0.3),
-                    width: 1.5,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: const Text(
-                  'Resend',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: SizedBox(
-                height: 52,
-                child: _isLoading
-                    ? _loadingButton()
-                    : ElevatedButton(
-                        onPressed: () async {
-                          if (_otpCtrl.text.length != 6) {
-                            _snack('Enter the 6-digit OTP', error: true);
-                            return;
-                          }
-                          if (_newPassCtrl.text.isEmpty) {
-                            _snack('Enter a new password', error: true);
-                            return;
-                          }
-                          if (_newPassCtrl.text != _confirmCtrl.text) {
-                            _snack('Passwords do not match', error: true);
-                            return;
-                          }
-                          setState(() => _isLoading = true);
-                          final res = await auth.verifyAndReset(
-                            _emailCtrl.text.trim(),
-                            _otpCtrl.text.trim(),
-                            _newPassCtrl.text.trim(),
-                          );
-                          setState(() => _isLoading = false);
-                          if (res['success']) {
-                            setState(() => _isSuccess = true);
-                          } else {
-                            _snack(
-                              res['message'] ?? 'Reset failed',
-                              error: true,
-                            );
-                          }
-                        },
-                        style: _primaryButtonStyle(),
-                        child: const Text(
-                          'Reset Password',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -534,9 +596,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     TextInputType? keyboardType,
     bool obscure = false,
     Widget? suffix,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onFieldSubmitted,
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       obscureText: obscure,
       keyboardType: keyboardType,
       style: const TextStyle(fontSize: 15, color: _textPrimary),

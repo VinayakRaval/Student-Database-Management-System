@@ -1,24 +1,38 @@
 import 'package:dio/dio.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:flutter_riverpod/legacy.dart';
+
 import '../../../../core/network/api_client.dart';
+
 import '../models/faculty_model.dart';
 
+
+
 // -----------------------------------------------------------------------------
+
 // 1. REGISTRATION LOGIC
+
 // -----------------------------------------------------------------------------
+
+
 
 class FacultyState {
   final bool isLoading;
   final List<DepartmentOption> departments;
   final String? errorMessage;
   final bool isSuccess;
+  final String? setupUrl;
+  final String? temporaryPassword;
 
   FacultyState({
     this.isLoading = false,
     this.departments = const [],
     this.errorMessage,
     this.isSuccess = false,
+    this.setupUrl,
+    this.temporaryPassword,
   });
 
   FacultyState copyWith({
@@ -26,194 +40,421 @@ class FacultyState {
     List<DepartmentOption>? departments,
     String? errorMessage,
     bool? isSuccess,
+    String? setupUrl,
+    String? temporaryPassword,
   }) {
     return FacultyState(
       isLoading: isLoading ?? this.isLoading,
       departments: departments ?? this.departments,
       errorMessage: errorMessage,
       isSuccess: isSuccess ?? false,
+      setupUrl: setupUrl,
+      temporaryPassword: temporaryPassword,
     );
   }
 }
 
 class FacultyController extends StateNotifier<FacultyState> {
+
   final Dio _dio;
+
+
 
   FacultyController(this._dio) : super(FacultyState()) {
+
     fetchDepartments();
+
   }
+
+
 
   // Fetch Departments for Dropdown
+
   // HANDLES: Simple List [] AND Paginated Response { "results": [] }
+
   Future<void> fetchDepartments() async {
+
     try {
+
       final response = await _dio.get('/academics/departments/');
+
       
+
       List<dynamic> data;
+
       // Check for Map (Pagination) or List (Direct)
+
       if (response.data is Map && (response.data as Map).containsKey('results')) {
+
          data = response.data['results'];
+
       } else if (response.data is List) {
+
          data = response.data;
+
       } else {
+
          data = [];
+
       }
+
+
 
       final departments = data.map((e) => DepartmentOption.fromMap(e)).toList();
+
       state = state.copyWith(departments: departments);
+
     } catch (e) {
+
       print("Department Fetch Error: $e");
+
       state = state.copyWith(errorMessage: "Failed to load departments: $e");
+
     }
+
   }
+
+
 
   // Register Faculty
+
   // HANDLES: File Upload on Web & Mobile using Bytes
+
   Future<void> registerFaculty(FacultyRegistrationModel faculty) async {
+
     state = state.copyWith(isLoading: true, errorMessage: null, isSuccess: false);
 
+
+
     try {
+
       FormData formData = FormData.fromMap({
+
         'faculty_id': faculty.facultyId,
+
         'name': faculty.name,
+
         'gender': faculty.gender,
+
         'dob': faculty.dob,
+
         'address': faculty.address,
+
         'phone': faculty.phone,
+
         'email': faculty.email,
+
         'department': faculty.departmentId,
+
         'qualification': faculty.qualification,
+
         'role': faculty.role,
+
+        'employment_type': faculty.employmentType ?? (faculty.isGuestFaculty ? 'GUEST' : 'PERMANENT'),
+
+        'is_guest_faculty': faculty.isGuestFaculty,
+
+        if (faculty.dateOfJoining != null && faculty.dateOfJoining!.isNotEmpty)
+
+          'date_of_joining': faculty.dateOfJoining,
+
       });
 
+
+
       // FIX: Read bytes instead of using file path (Works on Windows/Web)
+
       if (faculty.photoFile != null) {
+
         final bytes = await faculty.photoFile!.readAsBytes();
+
         formData.files.add(MapEntry(
+
           'photo',
+
           MultipartFile.fromBytes(bytes, filename: faculty.photoFile!.name),
+
         ));
+
       }
 
-      await _dio.post('/faculty/faculties/', data: formData);
 
-      state = state.copyWith(isLoading: false, isSuccess: true);
+
+      final response = await _dio.post('/faculty/faculties/', data: formData);
+      final tempPassword = (response.data is Map && response.data['temporary_password'] != null)
+          ? response.data['temporary_password'].toString()
+          : null;
+
+      state = state.copyWith(isLoading: false, isSuccess: true, temporaryPassword: tempPassword, setupUrl: null);
+
     } on DioException catch (e) {
+
       String errorMsg = "Registration Failed";
+
       if (e.response?.data != null) {
+
         if (e.response?.data is Map) {
+
           final map = e.response!.data as Map;
+
           final messages = <String>[];
+
           map.forEach((k, v) {
+
             if (v is List) {
+
               messages.add("$k: ${v.join(', ')}");
+
             } else {
+
               messages.add("$k: $v");
+
             }
+
           });
+
           errorMsg = messages.join("\n");
+
         } else {
-          errorMsg = e.response?.data.toString() ?? "Registration Failed";
+
+          final raw = e.response?.data.toString() ?? "";
+
+          if (raw.contains("already exists")) {
+
+            if (raw.contains("phone")) {
+
+              errorMsg = "A user or faculty with this phone number already exists.";
+
+            } else if (raw.contains("email")) {
+
+              errorMsg = "A user or faculty with this email address already exists.";
+
+            } else {
+
+              errorMsg = "A record with these details already exists.";
+
+            }
+
+          } else {
+
+            errorMsg = "Registration Failed. Please verify details and retry.";
+
+          }
+
         }
+
       } else if (e.message != null) {
+
         errorMsg = e.message!;
+
       }
+
       state = state.copyWith(isLoading: false, errorMessage: errorMsg);
+
     } catch (e) {
+
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
+
     }
+
   }
+
 }
 
+
+
 // -----------------------------------------------------------------------------
+
 // 2. APPROVAL & ACTION LOGIC (Approve / Reject)
+
 // -----------------------------------------------------------------------------
+
+
 
 class FacultyActionState {
+
   final bool isLoading;
+
   const FacultyActionState({this.isLoading = false});
+
 }
+
+
 
 class FacultyActionController extends StateNotifier<FacultyActionState> {
+
   final Dio _dio;
+
   FacultyActionController(this._dio) : super(const FacultyActionState());
 
+
+
   Future<bool> updateStatus(int id, String status) async {
+
     state = const FacultyActionState(isLoading: true);
+
     try {
+
       await _dio.patch('/faculty/faculties/$id/', data: {'status': status});
+
       state = const FacultyActionState(isLoading: false);
+
       return true;
+
     } catch (e) {
+
       state = const FacultyActionState(isLoading: false);
+
       return false; 
+
+    }
+
+  }
+
+
+
+  Future<bool> updateFaculty(int id, Map<String, dynamic> data) async {
+
+    state = const FacultyActionState(isLoading: true);
+
+    try {
+
+      await _dio.patch('/faculty/faculties/$id/', data: data);
+
+      state = const FacultyActionState(isLoading: false);
+
+      return true;
+
+    } catch (e) {
+
+      state = const FacultyActionState(isLoading: false);
+
+      return false;
+
     }
   }
 
-  Future<bool> updateFaculty(int id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>?> resetFacultyPassword(int id) async {
     state = const FacultyActionState(isLoading: true);
     try {
-      await _dio.patch('/faculty/faculties/$id/', data: data);
+      final response = await _dio.post('/faculty/faculties/$id/reset-password/');
       state = const FacultyActionState(isLoading: false);
-      return true;
+      if (response.data is Map<String, dynamic>) {
+        return response.data as Map<String, dynamic>;
+      }
+      return null;
     } catch (e) {
       state = const FacultyActionState(isLoading: false);
-      return false;
+      return null;
     }
   }
 }
 
+
 // -----------------------------------------------------------------------------
+
 // 3. PROVIDERS
+
 // -----------------------------------------------------------------------------
+
+
 
 final dioProvider = Provider<Dio>((ref) => ApiClient().dio);
 
+
+
 // Provider for Registration Logic
+
 final facultyProvider = StateNotifierProvider<FacultyController, FacultyState>((ref) {
+
   return FacultyController(ref.watch(dioProvider));
+
 });
+
+
 
 // Provider for Action Logic
+
 final facultyActionProvider = StateNotifierProvider<FacultyActionController, FacultyActionState>((ref) {
+
   return FacultyActionController(ref.watch(dioProvider));
+
 });
+
+
 
 // Provider for Fetching List (Handles Filtering & Pagination)
+
 final facultyListProvider = FutureProvider.family<List<Faculty>, String>((ref, filter) async {
+
   try {
+
     final dio = ref.watch(dioProvider);
+
     final response = await dio.get('/faculty/faculties/');
+
     
+
     List<dynamic> data;
+
     // Check for Map (Pagination) or List (Direct)
+
     if (response.data is Map && (response.data as Map).containsKey('results')) {
+
        data = response.data['results'];
+
     } else if (response.data is List) {
+
        data = response.data;
+
     } else {
+
        data = [];
+
     }
+
     
+
     final allFaculty = data.map((e) => Faculty.fromMap(e)).toList();
 
+
+
     if (filter == 'pending') {
+
       return allFaculty.where((f) => f.status.contains('pending')).toList();
+
     }
+
     
+
     return allFaculty;
+
   } catch (e) {
+
     throw Exception("Failed to load faculty list: $e");
+
   }
+
 });
 
+
+
 // Provider for Fetching Single Detail
+
 final facultyDetailProvider = FutureProvider.family<Faculty, int>((ref, id) async {
+
   try {
+
     final dio = ref.watch(dioProvider);
+
     final response = await dio.get('/faculty/faculties/$id/');
+
     return Faculty.fromMap(response.data);
+
   } catch (e) {
+
     throw Exception("Failed to load faculty details: $e");
+
   }
+
 });

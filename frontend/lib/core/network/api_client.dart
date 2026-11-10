@@ -29,12 +29,25 @@ class ApiClient {
         onRequest: (options, handler) async {
           print("🔵 SENDING REQUEST: ${options.uri}");
 
-          final token = await _storage.read(key: 'access');
-          if (token != null && token.isNotEmpty) {
-            print("✅ TOKEN FOUND: ${token.substring(0, 15)}...");
-            options.headers['Authorization'] = 'Bearer $token';
+          final path = options.path.toLowerCase();
+          final isPublicAuth = path.contains('login') ||
+              path.contains('token/refresh') ||
+              path.contains('password/reset') ||
+              path.contains('password/forgot') ||
+              path.contains('setup-password') ||
+              path.contains('register');
+
+          if (!isPublicAuth) {
+            final token = await _storage.read(key: 'access');
+            if (token != null && token.isNotEmpty) {
+              print("✅ TOKEN FOUND: ${token.substring(0, 15)}...");
+              options.headers['Authorization'] = 'Bearer $token';
+            } else {
+              print("🚨 NO TOKEN FOUND in Storage!");
+            }
           } else {
-            print("🚨 NO TOKEN FOUND in Storage!");
+            options.headers.remove('Authorization');
+            options.headers.remove('authorization');
           }
 
           if (options.data is FormData) {

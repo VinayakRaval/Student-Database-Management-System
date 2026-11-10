@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -90,7 +91,7 @@ class FeeCreationNotifier extends StateNotifier<FeeCreationState> {
     state = state.copyWith(totalAmount: total);
   }
 
-  Future<bool> submitFeeStructure({
+  Future<int?> submitFeeStructure({
     int? id,
     required int deptId,
     required int yearId,
@@ -124,16 +125,19 @@ class FeeCreationNotifier extends StateNotifier<FeeCreationState> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         state = state.copyWith(isLoading: false);
-        return true;
+        final createdId = (response.data is Map && response.data['id'] != null)
+            ? (response.data['id'] is int ? response.data['id'] as int : int.tryParse(response.data['id'].toString()))
+            : id;
+        return createdId ?? id ?? 1;
       } else {
-        print("API Error: ${response.data}");
+        debugPrint("API Error: ${response.data}");
         state = state.copyWith(isLoading: false);
-        return false;
+        return null;
       }
     } catch (e) {
-      print("EXCEPTION: $e");
+      debugPrint("EXCEPTION: $e");
       state = state.copyWith(isLoading: false);
-      return false;
+      return null;
     }
   }
 }

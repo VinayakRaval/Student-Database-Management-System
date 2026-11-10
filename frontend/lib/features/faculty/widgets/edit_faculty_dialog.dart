@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/faculty_model.dart';
 import '../providers/faculty_provider.dart';
+import '../../../../core/utils/validation_utils.dart';
 
 class EditFacultyDialog extends ConsumerStatefulWidget {
   final Faculty faculty;
@@ -29,6 +30,7 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
   late TextEditingController _qualCtrl;
   late TextEditingController _addressCtrl;
 
+  bool _isGuestFaculty = false;
   String? _selectedRole;
   String? _selectedGender;
   int? _selectedDepartmentId;
@@ -66,6 +68,7 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
     }
 
     _selectedDepartmentId = f.departmentId;
+    _isGuestFaculty = f.isGuestFaculty || (f.employmentType?.toUpperCase() == 'GUEST');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(facultyProvider.notifier).fetchDepartments();
@@ -83,15 +86,42 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
   }
 
   Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ValidationUtils.showValidationErrorSnackBar(context);
+      return;
+    }
+
+    final phone = _phoneCtrl.text.trim();
+    final phoneError = ValidationUtils.validatePhone(phone);
+    if (phoneError != null) {
+      ValidationUtils.showValidationPopup(
+        context,
+        title: 'Invalid Phone Number',
+        message: phoneError,
+      );
+      return;
+    }
+
+    final email = _emailCtrl.text.trim();
+    final emailError = ValidationUtils.validateEmail(email);
+    if (emailError != null) {
+      ValidationUtils.showValidationPopup(
+        context,
+        title: 'Invalid Email Address',
+        message: emailError,
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
 
     final Map<String, dynamic> updateData = {
       'name': _nameCtrl.text.trim(),
-      'phone': _phoneCtrl.text.trim(),
-      'email': _emailCtrl.text.trim(),
+      'phone': phone,
+      'email': email,
       'role': _selectedRole,
+      'employment_type': _isGuestFaculty ? 'GUEST' : 'PERMANENT',
+      'is_guest_faculty': _isGuestFaculty,
       if (_selectedGender != null) 'gender': _selectedGender,
       if (_selectedDepartmentId != null) 'department': _selectedDepartmentId,
       'qualification': _qualCtrl.text.trim(),
@@ -210,7 +240,7 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
                             label: "Full Name *",
                             controller: _nameCtrl,
                             hint: "Faculty Name",
-                            validator: (val) => val == null || val.trim().isEmpty ? "Name is required" : null,
+                            validator: (val) => ValidationUtils.mandatory(val),
                           ),
 
                           Row(
@@ -247,7 +277,7 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
                                   controller: _emailCtrl,
                                   hint: "email@example.com",
                                   keyboardType: TextInputType.emailAddress,
-                                  validator: (val) => val == null || val.trim().isEmpty ? "Email is required" : null,
+                                  validator: (val) => ValidationUtils.validateEmail(val),
                                 ),
                               ),
                               const SizedBox(width: 14),
@@ -257,7 +287,7 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
                                   controller: _phoneCtrl,
                                   hint: "Phone Number",
                                   keyboardType: TextInputType.phone,
-                                  validator: (val) => val == null || val.trim().isEmpty ? "Phone is required" : null,
+                                  validator: (val) => ValidationUtils.validatePhone(val),
                                 ),
                               ),
                             ],
@@ -301,6 +331,38 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _isGuestFaculty,
+                                  activeColor: const Color(0xFF13246E),
+                                  onChanged: (val) => setState(() => _isGuestFaculty = val ?? false),
+                                ),
+                                const Text(
+                                  "Employment Type: Guest Faculty",
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF13246E),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _isGuestFaculty ? "(Guest / Visiting)" : "(Permanent)",
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -376,23 +438,24 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
             ),
           ),
           const SizedBox(height: 6),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: TextFormField(
-              controller: controller,
-              maxLines: maxLines,
-              keyboardType: keyboardType,
-              validator: validator,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              ),
+          TextFormField(
+            controller: controller,
+            maxLines: maxLines,
+            keyboardType: keyboardType,
+            validator: validator ?? (val) => label.contains('*') ? ValidationUtils.mandatory(val) : null,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF13246E), width: 1.5)),
+              errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+              focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+              errorStyle: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -421,21 +484,23 @@ class _EditFacultyDialogState extends ConsumerState<EditFacultyDialog> {
             ),
           ),
           const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButtonFormField<T>(
-                value: value,
-                items: items,
-                onChanged: onChanged,
-                isExpanded: true,
-                hint: hint != null ? Text(hint, style: TextStyle(fontSize: 13, color: Colors.grey.shade400)) : null,
-                decoration: const InputDecoration(border: InputBorder.none),
-              ),
+          DropdownButtonFormField<T>(
+            value: value,
+            isExpanded: true,
+            hint: hint != null ? Text(hint, style: TextStyle(fontSize: 13, color: Colors.grey.shade400)) : null,
+            items: items,
+            onChanged: onChanged,
+            validator: (val) => label.contains('*') ? ValidationUtils.mandatorySelect(val) : null,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF13246E), width: 1.5)),
+              errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+              focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+              errorStyle: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.w500),
             ),
           ),
         ],

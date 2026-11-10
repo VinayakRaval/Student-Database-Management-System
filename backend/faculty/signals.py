@@ -5,8 +5,8 @@ from django.utils import timezone
 from django.conf import settings
 
 from .models import Faculty
-from userlogin.models import CustomUser, AccountInvitation
-from userlogin.email_service import send_password_setup_invitation
+from userlogin.models import CustomUser, PasswordAuditLog
+from userlogin.password_service import set_temporary_password_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def create_or_update_user_for_faculty(sender, instance, created, **kwargs):
         Faculty.objects.filter(id=instance.id).update(approved_date=instance.approved_date)
 
     role_upper = (instance.role or "PROFESSOR").upper()
-    if role_upper == "FACULTY":
+    if role_upper in ["FACULTY", "GUEST", "GUEST_FACULTY", "GUEST FACULTY"] or instance.is_guest_faculty or instance.employment_type == "GUEST":
         role_upper = "PROFESSOR"
 
     # Ensure only one principal exists
@@ -46,49 +46,47 @@ def create_or_update_user_for_faculty(sender, instance, created, **kwargs):
         user = CustomUser.objects.filter(email=instance.email).first()
 
     user_created = False
-    if not user:
-        user = CustomUser.objects.create_user(
-            email=instance.email,
-            phone=instance.phone,
-            user_id=instance.faculty_id,
-            password=None,  # Unusable password until secure initial setup
-            role=role_upper,
-            department=instance.department,
-            force_password_change=True,
-            is_active=False,  # Activated upon token setup
-            is_staff=True if role_upper in ["PRINCIPAL", "SYSTEM"] else False,
-        )
-        user_created = True
-    else:
-        user.email = instance.email
-        user.phone = instance.phone
-        user.department = instance.department
-        user.role = role_upper
-        if role_upper in ["PRINCIPAL", "SYSTEM"]:
-            user.is_staff = True
-        user.save()
+    try:
+        if not user:
+            user = CustomUser.objects.create_user(
+                email=instance.email,
+                phone=instance.phone,
+                user_id=instance.faculty_id,
+                password=None,
+                role=role_upper,
+                department=instance.department,
+                force_password_change=True,
+                is_active=True,
+                is_staff=True if role_upper in ["PRINCIPAL", "SYSTEM"] else False,
+            )
+            user_created = True
+        else:
+            user.email = instance.email
+            user.phone = instance.phone
+            user.department = instance.department
+            user.role = role_upper
+            user.is_active = True
+            if role_upper in ["PRINCIPAL", "SYSTEM"]:
+                user.is_staff = True
+            user.save()
 
-    if instance.user_id != user.id:
-        Faculty.objects.filter(id=instance.id).update(user=user)
+        if instance.user_id != user.id:
+            Faculty.objects.filter(id=instance.id).update(user=user)
+    except Exception as e:
+        logger.error(f"[FACULTY USER SYNC ERROR] Could not sync user for faculty {instance.faculty_id}: {e}", exc_info=True)
+        return
 
-    # If this is a newly created user or a user that has not set their password, send setup invitation
+    # If this is a newly created user or a user without a usable password, generate initial temporary password
     if user_created or not user.has_usable_password():
         try:
-            invitation, raw_token = AccountInvitation.create_invitation(
+            temp_pwd = set_temporary_password_for_user(
                 user=user,
-                invitation_type=AccountInvitation.TYPE_INITIAL_SETUP,
-                expiry_hours=24
+                actor=None,
+                action=PasswordAuditLog.ACTION_INITIAL_CREATION
             )
-
-            send_password_setup_invitation(
-                user=user,
-                raw_token=raw_token,
-                recipient_name=instance.name,
-                id_value=instance.faculty_id,
-                role=role_upper.title(),
-                invitation_type=AccountInvitation.TYPE_INITIAL_SETUP,
-                expiry_hours=24
-            )
-            logger.info(f"[FACULTY INVITATION DISPATCHED] Setup invitation sent to {instance.email}")
+            instance._temporary_password = temp_pwd
+            instance.temp_password = temp_pwd
+            Faculty.objects.filter(id=instance.id).update(temp_password=temp_pwd)
+            logger.info(f"[FACULTY PASSWORD INITIALIZED] Initial credentials generated for {instance.faculty_id}")
         except Exception as e:
-            logger.error(f"[FACULTY INVITATION FAILED] Could not dispatch faculty setup invitation: {e}", exc_info=True)
+            logger.error(f"[FACULTY PASSWORD ERROR] Could not generate initial password for faculty: {e}", exc_info=True)

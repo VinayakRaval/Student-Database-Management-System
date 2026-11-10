@@ -26,6 +26,10 @@ urlpatterns = [
     path('grievances/', include('grievances.urls')),
     path('external_results/', include('external_results.urls')),
     path('announcements/', include('announcements.urls')),
+    path('corrections/', include('corrections.urls')),
+    path('api/corrections/', include('corrections.urls')),
+    path('placement/', include('placement.urls')),
+    path('api/placement/', include('placement.urls')),
     path('', lambda request: HttpResponse(
         "<h1>Student Data Management System</h1>"
         "<p>Backend is running successfully.</p>"

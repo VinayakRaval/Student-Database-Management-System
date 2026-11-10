@@ -6,6 +6,7 @@ import '../../../core/network/api_client.dart';
 import '../providers/fee_creation_provider.dart';
 import '../providers/fee_action_provider.dart';
 import '../models/fee_structure_models.dart';
+import '../widgets/dte_fee_receipt_widget.dart';
 
 class FeeStructureCreateScreen extends ConsumerStatefulWidget {
   final int? feeId;
@@ -52,6 +53,10 @@ class _FeeStructureCreateScreenState
     super.initState();
     if (widget.feeId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadExistingData());
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(feeCreationProvider.notifier).resetForm();
+      });
     }
   }
 
@@ -60,7 +65,57 @@ class _FeeStructureCreateScreenState
       final fee = await ref.read(
         feeStructureDetailProvider(widget.feeId!).future,
       );
-      setState(() => _selectedSeat = fee.seatType.toLowerCase());
+
+      int? deptId = fee.departmentId;
+      int? yearId = fee.academicYearId;
+      int? semId = fee.semesterId;
+
+      // Fallback matching if IDs were not directly provided
+      try {
+        if (deptId == null) {
+          final depts = await ref.read(departmentListProvider.future);
+          final match = depts.cast<FeeDropdownItem?>().firstWhere(
+            (d) => d != null && d.name.toLowerCase() == fee.department.toLowerCase(),
+            orElse: () => null,
+          );
+          if (match != null) deptId = match.id;
+        }
+      } catch (_) {}
+
+      try {
+        if (yearId == null) {
+          final years = await ref.read(academicYearListProvider.future);
+          final match = years.cast<FeeDropdownItem?>().firstWhere(
+            (y) => y != null && y.name.toLowerCase() == fee.academicYear.toLowerCase(),
+            orElse: () => null,
+          );
+          if (match != null) yearId = match.id;
+        }
+      } catch (_) {}
+
+      try {
+        if (semId == null) {
+          final sems = await ref.read(semesterListProvider.future);
+          final match = sems.cast<FeeDropdownItem?>().firstWhere(
+            (s) => s != null && (s.name.toLowerCase() == fee.semester.toLowerCase() ||
+                (s.name.contains(RegExp(r'\d')) && fee.semester.contains(RegExp(r'\d')) &&
+                 RegExp(r'\d+').firstMatch(s.name)?.group(0) == RegExp(r'\d+').firstMatch(fee.semester)?.group(0))),
+            orElse: () => null,
+          );
+          if (match != null) semId = match.id;
+        }
+      } catch (_) {}
+
+      setState(() {
+        final seat = fee.seatType.toLowerCase();
+        if (!seatOptions.any((opt) => opt['value'] == seat)) {
+          seatOptions.add({'label': seat.toUpperCase(), 'value': seat});
+        }
+        _selectedSeat = seat;
+        if (deptId != null) _selectedDept = deptId;
+        if (yearId != null) _selectedYear = yearId;
+        if (semId != null) _selectedSem = semId;
+      });
       ref.read(feeCreationProvider.notifier).loadExistingData(fee);
     } catch (e) {
       if (mounted) {
@@ -165,6 +220,37 @@ class _FeeStructureCreateScreenState
     );
   }
 
+  void _previewStructureDialog(FeeCreationState state) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        contentPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: SizedBox(
+          width: 680,
+          child: SingleChildScrollView(
+            child: DteFeeReceiptWidget(
+              institutionName: "Government Engineering College Chamarajanagara",
+              bookletNo: "10495685",
+              receiptDate: "01/01/2026",
+              receiptNo: "0821183",
+              studentName: "Applicable to All ${_selectedSeat.toUpperCase()} Students",
+              branch: "Computer Science and Engineering",
+              category: _selectedSeat.toUpperCase(),
+              year: "2025-2026",
+              components: state.components.where((c) => c.name.trim().isNotEmpty).map((c) => {'name': c.name, 'amount': c.amount}).toList(),
+              totalAmount: state.totalAmount,
+              status: "PENDING",
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close")),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(feeCreationProvider);
@@ -176,6 +262,15 @@ class _FeeStructureCreateScreenState
         title: Text(isEdit ? "Edit Fee Structure" : "Create Fee Structure"),
         backgroundColor: const Color(0xFF13246E),
         foregroundColor: Colors.white,
+        actions: [
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.remove_red_eye_rounded, size: 18),
+            label: const Text("Preview DTE Document"),
+            onPressed: () => _previewStructureDialog(state),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -201,6 +296,7 @@ class _FeeStructureCreateScreenState
                     Expanded(
                       flex: 2,
                       child: Autocomplete<String>(
+                        initialValue: TextEditingValue(text: state.components[index].name),
                         optionsBuilder: (TextEditingValue textEditingValue) {
                           if (textEditingValue.text == '') return _feeTypes;
                           return _feeTypes.where((String option) {
@@ -242,10 +338,12 @@ class _FeeStructureCreateScreenState
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextFormField(
-                        key: ValueKey("amount_$index"),
+                        key: ValueKey("amount_${index}_${state.components[index].amount}"),
                         initialValue: state.components[index].amount == 0
                             ? ''
-                            : state.components[index].amount.toString(),
+                            : (state.components[index].amount % 1 == 0
+                                ? state.components[index].amount.toInt().toString()
+                                : state.components[index].amount.toString()),
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: "Amount",
@@ -313,28 +411,32 @@ class _FeeStructureCreateScreenState
                         }
                         return;
                       }
-                      final success = await notifier.submitFeeStructure(
+                      final resultId = await notifier.submitFeeStructure(
                         id: widget.feeId,
                         deptId: _selectedDept!,
                         yearId: _selectedYear!,
                         semId: _selectedSem!,
                         seatType: _selectedSeat,
                       );
-                      if (success && mounted) {
+                      if (resultId != null && mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
                               isEdit
-                                  ? "Structure Updated!"
-                                  : "Structure Created!",
+                                  ? "Fee Structure Updated!"
+                                  : "Fee Structure Created & Submitted to Principal for Approval!",
                             ),
                             backgroundColor: Colors.green,
                           ),
                         );
+                        ref.invalidate(feeStructureListProvider('all'));
+                        ref.invalidate(feeStructureListProvider('pending'));
                         if (isEdit) {
                           context.pop();
                         } else {
                           notifier.resetForm();
+                          // Immediately open the official DTE document view
+                          context.pushReplacement('/fees/detail/$resultId');
                         }
                       }
                     },
@@ -488,11 +590,12 @@ class _FeeStructureCreateScreenState
   ) {
     return data.when(
       data: (items) {
-        if (items.isEmpty)
+        if (items.isEmpty) {
           return Text(
             "No $label found",
             style: const TextStyle(color: Colors.orange),
           );
+        }
         return DropdownButtonFormField<int>(
           value: currentValue,
           decoration: InputDecoration(

@@ -167,7 +167,8 @@ class StudentAPITests(BaseStudentAPITest):
             email="promote@mail.com", parent_occupation="Farmer",
             address="Add", permanent_address="Add", seat_type="general_merit",
             date_of_admission="2025-01-01",
-            semester=self.sem1, academic_year=self.ay
+            semester=self.sem1, academic_year=self.ay,
+            status="active", registration_status="approved"
         )
 
         url = f"/students/{student.id}/promote/"

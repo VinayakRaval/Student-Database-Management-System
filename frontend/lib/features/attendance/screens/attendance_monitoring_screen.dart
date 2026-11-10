@@ -1,3 +1,4 @@
+import 'package:frontend/core/widgets/app_pagination_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend/core/network/api_client.dart';
@@ -24,6 +25,42 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
 
   String _searchQuery = "";
   String? _selectedSemester;
+  String? _selectedAcademicYear;
+  int? _selectedSubjectId;
+  List<Map<String, dynamic>> _academicYears = [];
+
+  int _subjectsPage = 1;
+  int _submissionsPage = 1;
+  int _lowAttendancePage = 1;
+  int _correctionsPage = 1;
+  static const int _pageSize = 10;
+
+  void _resetPages() {
+    _subjectsPage = 1;
+    _submissionsPage = 1;
+    _lowAttendancePage = 1;
+    _correctionsPage = 1;
+  }
+
+  List<Map<String, dynamic>> _getAcademicYearOptions() {
+    if (_academicYears.isNotEmpty) return _academicYears;
+    return [
+      {"id": 2, "year_name": "2026-2027"},
+      {"id": 1, "year_name": "2025-2026"},
+    ];
+  }
+
+  List<Map<String, dynamic>> _getUniqueSubjects() {
+    final seen = <int>{};
+    final list = <Map<String, dynamic>>[];
+    for (final s in _subjects) {
+      final id = s['subject_id'] as int?;
+      if (id != null && seen.add(id)) {
+        list.add(s);
+      }
+    }
+    return list;
+  }
 
   @override
   void initState() {
@@ -55,6 +92,15 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
           _submissions = List<Map<String, dynamic>>.from(res.data['submissions'] ?? []);
           _lowAttendanceStudents = List<Map<String, dynamic>>.from(res.data['low_attendance_students'] ?? []);
           _correctionRequests = List<Map<String, dynamic>>.from(res.data['correction_requests'] ?? []);
+          if (res.data['academic_years'] is List) {
+            _academicYears = List<Map<String, dynamic>>.from(res.data['academic_years']);
+          }
+          if (_academicYears.isEmpty) {
+            _academicYears = [
+              {"id": 2, "year_name": "2026-2027"},
+              {"id": 1, "year_name": "2025-2026"},
+            ];
+          }
           _isLoading = false;
         });
       }
@@ -351,7 +397,7 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
     final deptName = _deptInfo['name'] ?? 'Department of Computer Science';
     final userEmail = _deptInfo['user_email'] ?? 'hod@department.college.edu';
 
-    // Filtered lists
+    // Filtered lists with Academic Year, Subject, Semester, and Search filters
     final filteredSubjects = _subjects.where((s) {
       final matchesSearch = _searchQuery.isEmpty ||
           (s['subject_code'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -360,7 +406,43 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
       final matchesSem = _selectedSemester == null ||
           _selectedSemester!.isEmpty ||
           s['semester']?.toString() == _selectedSemester;
+      final matchesSubject = _selectedSubjectId == null || s['subject_id'] == _selectedSubjectId;
+      final matchesAy = _selectedAcademicYear == null ||
+          _selectedAcademicYear!.isEmpty ||
+          (s['academic_year']?.toString() == _selectedAcademicYear);
+      return matchesSearch && matchesSem && matchesSubject && matchesAy;
+    }).toList();
+
+    final filteredSubmissions = _submissions.where((s) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          (s['subject_code'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (s['subject_name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (s['faculty_name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSubject = _selectedSubjectId == null ||
+          s['subject_id'] == _selectedSubjectId ||
+          (_selectedSubjectId != null && _subjects.any((sub) => sub['subject_id'] == _selectedSubjectId && sub['subject_code'] == s['subject_code']));
+      return matchesSearch && matchesSubject;
+    }).toList();
+
+    final filteredLowAttendance = _lowAttendanceStudents.where((st) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          (st['usn'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (st['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSem = _selectedSemester == null ||
+          _selectedSemester!.isEmpty ||
+          st['semester']?.toString() == _selectedSemester;
       return matchesSearch && matchesSem;
+    }).toList();
+
+    final filteredCorrections = _correctionRequests.where((cr) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          (cr['student_usn'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (cr['student_name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (cr['subject_code'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (cr['faculty_name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSubject = _selectedSubjectId == null ||
+          (_selectedSubjectId != null && _subjects.any((sub) => sub['subject_id'] == _selectedSubjectId && sub['subject_code'] == cr['subject_code']));
+      return matchesSearch && matchesSubject;
     }).toList();
 
     return Scaffold(
@@ -565,7 +647,7 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 SizedBox(
-                                  width: 260,
+                                  width: 220,
                                   height: 42,
                                   child: TextField(
                                     decoration: InputDecoration(
@@ -577,9 +659,42 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                                       filled: true,
                                       fillColor: const Color(0xFFF8FAFC),
                                     ),
-                                    onChanged: (val) => setState(() => _searchQuery = val),
+                                    onChanged: (val) => setState(() {
+                                      _searchQuery = val;
+                                      _resetPages();
+                                    }),
                                   ),
                                 ),
+
+                                // Academic Year Dropdown Filter
+                                Container(
+                                  height: 42,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: const Color(0xFFF8FAFC),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedAcademicYear,
+                                      hint: const Text("All Academic Years", style: TextStyle(fontSize: 13)),
+                                      items: [
+                                        const DropdownMenuItem(value: null, child: Text("All Academic Years")),
+                                        ..._getAcademicYearOptions().map((ay) {
+                                          final name = ay['year_name']?.toString() ?? '';
+                                          return DropdownMenuItem(value: name, child: Text(name));
+                                        }),
+                                      ],
+                                      onChanged: (val) => setState(() {
+                                        _selectedAcademicYear = val;
+                                        _resetPages();
+                                      }),
+                                    ),
+                                  ),
+                                ),
+
+                                // Semester Dropdown Filter
                                 Container(
                                   height: 42,
                                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -596,7 +711,44 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                                         const DropdownMenuItem(value: null, child: Text("All Semesters")),
                                         ...List.generate(8, (i) => DropdownMenuItem(value: "${i + 1}", child: Text("Semester ${i + 1}"))),
                                       ],
-                                      onChanged: (val) => setState(() => _selectedSemester = val),
+                                      onChanged: (val) => setState(() {
+                                        _selectedSemester = val;
+                                        _resetPages();
+                                      }),
+                                    ),
+                                  ),
+                                ),
+
+                                // Subjects Dropdown Filter
+                                Container(
+                                  height: 42,
+                                  constraints: const BoxConstraints(maxWidth: 220),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: const Color(0xFFF8FAFC),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      isExpanded: true,
+                                      value: _selectedSubjectId,
+                                      hint: const Text("All Subjects", style: TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                                      items: [
+                                        const DropdownMenuItem(value: null, child: Text("All Subjects")),
+                                        ..._getUniqueSubjects().map((sub) {
+                                          final code = sub['subject_code'] ?? '';
+                                          final name = sub['subject_name'] ?? '';
+                                          return DropdownMenuItem(
+                                            value: sub['subject_id'] as int?,
+                                            child: Text("$code - $name", overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                                          );
+                                        }),
+                                      ],
+                                      onChanged: (val) => setState(() {
+                                        _selectedSubjectId = val;
+                                        _resetPages();
+                                      }),
                                     ),
                                   ),
                                 ),
@@ -627,18 +779,18 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                             tabs: [
                               Tab(text: "Subject Attendance (${filteredSubjects.length})"),
-                              Tab(text: "Professor Submissions (${_submissions.length})"),
+                              Tab(text: "Professor Submissions (${filteredSubmissions.length})"),
                               Tab(
                                 child: Row(
                                   children: [
                                     const Text("Below Threshold (<75%)"),
-                                    if (_lowAttendanceStudents.isNotEmpty) ...[
+                                    if (filteredLowAttendance.isNotEmpty) ...[
                                       const SizedBox(width: 6),
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
                                         child: Text(
-                                          "${_lowAttendanceStudents.length}",
+                                          "${filteredLowAttendance.length}",
                                           style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                                         ),
                                       ),
@@ -646,7 +798,7 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                                   ],
                                 ),
                               ),
-                              Tab(text: "Correction Requests (${_correctionRequests.length})"),
+                              Tab(text: "Correction Requests (${filteredCorrections.length})"),
                               const Tab(text: "Attendance Summary"),
                             ],
                           ),
@@ -659,9 +811,9 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                               controller: _tabController,
                               children: [
                                 _buildSubjectsTab(filteredSubjects),
-                                _buildSubmissionsTab(),
-                                _buildLowAttendanceTab(),
-                                _buildCorrectionsTab(),
+                                _buildSubmissionsTab(filteredSubmissions),
+                                _buildLowAttendanceTab(filteredLowAttendance),
+                                _buildCorrectionsTab(filteredCorrections),
                                 _buildSummaryTab(),
                               ],
                             ),
@@ -741,148 +893,187 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
     if (subjectsList.isEmpty) {
       return const Center(child: Text("No subjects matching criteria."));
     }
+    final totalItems = subjectsList.length;
+    final totalPages = (totalItems / _pageSize).ceil();
+    final safePage = _subjectsPage > totalPages ? totalPages : (_subjectsPage < 1 ? 1 : _subjectsPage);
+    final pageItems = subjectsList.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-          columns: const [
-            DataColumn(label: Text("Code", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Subject Name", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Semester", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Faculty", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Sessions", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Attendance %", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Status", style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text("Action", style: TextStyle(fontWeight: FontWeight.bold))),
-          ],
-          rows: subjectsList.map((s) {
-            final numSessions = s['total_sessions'] ?? 0;
-            final pct = (s['attendance_percentage'] as num?)?.toDouble();
-            final statusCode = (s['status'] ?? '').toString();
-            final statusLabel = s['status_label'] ?? statusCode;
-
-            Color statusColor;
-            Color statusBg;
-            if (statusCode == 'UNASSIGNED') {
-              statusColor = Colors.grey.shade700;
-              statusBg = Colors.grey.shade200;
-            } else if (statusCode == 'NO_SESSIONS') {
-              statusColor = Colors.blueGrey.shade700;
-              statusBg = Colors.blueGrey.shade100;
-            } else if (statusCode == 'HEALTHY' || (pct != null && pct >= 75)) {
-              statusColor = Colors.green.shade800;
-              statusBg = Colors.green.shade100;
-            } else {
-              statusColor = Colors.red.shade800;
-              statusBg = Colors.red.shade100;
-            }
-
-            return DataRow(
-              cells: [
-                DataCell(Text(s['subject_code'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold))),
-                DataCell(
-                  Row(
-                    children: [
-                      Text(s['subject_name'] ?? 'N/A'),
-                      if (s['is_elective'] == true) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
-                          child: Text("Elective", style: TextStyle(color: Colors.amber.shade900, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                DataCell(Text("Sem ${s['semester'] ?? 'N/A'}")),
-                DataCell(Text(s['faculty_name'] ?? 'Unassigned')),
-                DataCell(Text("$numSessions")),
-                DataCell(
-                  pct != null
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 50,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: (pct / 100).clamp(0.0, 1.0),
-                                  backgroundColor: Colors.grey.shade200,
-                                  valueColor: AlwaysStoppedAnimation(pct >= 75 ? Colors.green : Colors.red),
-                                  minHeight: 6,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text("$pct%", style: TextStyle(fontWeight: FontWeight.bold, color: pct >= 75 ? Colors.green.shade800 : Colors.red.shade800)),
-                          ],
-                        )
-                      : Text("N/A", style: TextStyle(color: Colors.grey.shade500, fontStyle: FontStyle.italic)),
-                ),
-                DataCell(
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)),
-                    child: Text(
-                      statusLabel,
-                      style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                  ),
-                ),
-                DataCell(
-                  TextButton.icon(
-                    onPressed: () => _showSubjectStudentsDialog(s['subject_id'], s['subject_code'] ?? '', s['subject_name'] ?? ''),
-                    icon: const Icon(Icons.people_outline, size: 14),
-                    label: const Text("View Students", style: TextStyle(fontSize: 12)),
-                  ),
-                ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+              columns: const [
+                DataColumn(label: Text("Code", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Subject Name", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Semester", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Faculty", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Sessions", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Attendance %", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Status", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Action", style: TextStyle(fontWeight: FontWeight.bold))),
               ],
-            );
-          }).toList(),
-        ),
+              rows: pageItems.map((s) {
+                final numSessions = s['total_sessions'] ?? 0;
+                final pct = (s['attendance_percentage'] as num?)?.toDouble();
+                final statusCode = (s['status'] ?? '').toString();
+                final statusLabel = s['status_label'] ?? statusCode;
+
+                Color statusColor;
+                Color statusBg;
+                if (statusCode == 'UNASSIGNED') {
+                  statusColor = Colors.grey.shade700;
+                  statusBg = Colors.grey.shade200;
+                } else if (statusCode == 'NO_SESSIONS') {
+                  statusColor = Colors.blueGrey.shade700;
+                  statusBg = Colors.blueGrey.shade100;
+                } else if (statusCode == 'HEALTHY' || (pct != null && pct >= 75)) {
+                  statusColor = Colors.green.shade800;
+                  statusBg = Colors.green.shade100;
+                } else {
+                  statusColor = Colors.red.shade800;
+                  statusBg = Colors.red.shade100;
+                }
+
+                return DataRow(
+                  cells: [
+                    DataCell(Text(s['subject_code'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(
+                      Row(
+                        children: [
+                          Text(s['subject_name'] ?? 'N/A'),
+                          if (s['is_elective'] == true) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
+                              child: Text("Elective", style: TextStyle(color: Colors.amber.shade900, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    DataCell(Text("Sem ${s['semester'] ?? 'N/A'}")),
+                    DataCell(Text(s['faculty_name'] ?? 'Unassigned')),
+                    DataCell(Text("$numSessions")),
+                    DataCell(
+                      pct != null
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 50,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: (pct / 100).clamp(0.0, 1.0),
+                                      backgroundColor: Colors.grey.shade200,
+                                      valueColor: AlwaysStoppedAnimation(pct >= 75 ? Colors.green : Colors.red),
+                                      minHeight: 6,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text("$pct%", style: TextStyle(fontWeight: FontWeight.bold, color: pct >= 75 ? Colors.green.shade800 : Colors.red.shade800)),
+                              ],
+                            )
+                          : Text("N/A", style: TextStyle(color: Colors.grey.shade500, fontStyle: FontStyle.italic)),
+                    ),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)),
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      TextButton.icon(
+                        onPressed: () => _showSubjectStudentsDialog(s['subject_id'], s['subject_code'] ?? '', s['subject_name'] ?? ''),
+                        icon: const Icon(Icons.list_alt, size: 14),
+                        label: const Text("View Students", style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppPaginationBar(
+            currentPage: safePage,
+            totalPages: totalPages,
+            totalItems: totalItems,
+            pageSize: _pageSize,
+            onPageChanged: (newPage) => setState(() => _subjectsPage = newPage),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSubmissionsTab() {
-    if (_submissions.isEmpty) {
-      return const Center(child: Text("No attendance sessions recorded yet."));
+  Widget _buildSubmissionsTab(List<Map<String, dynamic>> submissionsList) {
+    if (submissionsList.isEmpty) {
+      return const Center(child: Text("No attendance sessions matching criteria."));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _submissions.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final sub = _submissions[index];
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: const Color(0xFF13246E).withOpacity(0.1),
-            child: const Icon(Icons.check_circle_rounded, color: Color(0xFF13246E)),
+    final totalItems = submissionsList.length;
+    final totalPages = (totalItems / _pageSize).ceil();
+    final safePage = _submissionsPage > totalPages ? totalPages : (_submissionsPage < 1 ? 1 : _submissionsPage);
+    final pageItems = submissionsList.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: pageItems.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final sub = pageItems[index];
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF13246E).withOpacity(0.1),
+                  child: const Icon(Icons.check_circle_rounded, color: Color(0xFF13246E)),
+                ),
+                title: Text("${sub['subject_code']} - ${sub['subject_name']}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("Faculty: ${sub['faculty_name']} | Date: ${sub['date']} | Students marked: ${sub['records_count']}"),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    sub['status'] ?? 'SUBMITTED',
+                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              );
+            },
           ),
-          title: Text("${sub['subject_code']} - ${sub['subject_name']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text("Faculty: ${sub['faculty_name']} | Date: ${sub['date']} | Students marked: ${sub['records_count']}"),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              sub['status'] ?? 'SUBMITTED',
-              style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold, fontSize: 12),
-            ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: AppPaginationBar(
+            currentPage: safePage,
+            totalPages: totalPages,
+            totalItems: totalItems,
+            pageSize: _pageSize,
+            onPageChanged: (newPage) => setState(() => _submissionsPage = newPage),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
-  Widget _buildLowAttendanceTab() {
-    if (_lowAttendanceStudents.isEmpty) {
+  Widget _buildLowAttendanceTab(List<Map<String, dynamic>> lowAttendanceList) {
+    if (lowAttendanceList.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -894,63 +1085,92 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
         ),
       );
     }
+    final totalItems = lowAttendanceList.length;
+    final totalPages = (totalItems / _pageSize).ceil();
+    final safePage = _lowAttendancePage > totalPages ? totalPages : (_lowAttendancePage < 1 ? 1 : _lowAttendancePage);
+    final pageItems = lowAttendanceList.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: DataTable(
-        headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-        columns: const [
-          DataColumn(label: Text("USN", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Student Name", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Semester", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Classes Attended", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Attendance %", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Phone", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Action", style: TextStyle(fontWeight: FontWeight.bold))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
+              columns: const [
+                DataColumn(label: Text("USN", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Student Name", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Semester", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Classes Attended", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Attendance %", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Phone", style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text("Action", style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              rows: pageItems.map((st) {
+                final pct = (st['percentage'] as num?)?.toDouble() ?? 0.0;
+                return DataRow(
+                  cells: [
+                    DataCell(Text(st['usn'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(Text(st['name'] ?? 'N/A')),
+                    DataCell(Text("Sem ${st['semester'] ?? 'N/A'}")),
+                    DataCell(Text("${st['attended_classes']} / ${st['total_classes']}")),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
+                        child: Text("$pct%", style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    DataCell(Text(st['phone'] ?? 'N/A')),
+                    DataCell(
+                      TextButton.icon(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Alert notification dispatched to student ${st['usn']} and faculty advisor.")),
+                          );
+                        },
+                        icon: const Icon(Icons.send_rounded, size: 14),
+                        label: const Text("Send Alert", style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppPaginationBar(
+            currentPage: safePage,
+            totalPages: totalPages,
+            totalItems: totalItems,
+            pageSize: _pageSize,
+            onPageChanged: (newPage) => setState(() => _lowAttendancePage = newPage),
+          ),
         ],
-        rows: _lowAttendanceStudents.map((st) {
-          final pct = (st['percentage'] as num?)?.toDouble() ?? 0.0;
-          return DataRow(
-            cells: [
-              DataCell(Text(st['usn'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(st['name'] ?? 'N/A')),
-              DataCell(Text("Sem ${st['semester'] ?? 'N/A'}")),
-              DataCell(Text("${st['attended_classes']} / ${st['total_classes']}")),
-              DataCell(
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
-                  child: Text("$pct%", style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              DataCell(Text(st['phone'] ?? 'N/A')),
-              DataCell(
-                TextButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Alert notification dispatched to student ${st['usn']} and faculty advisor.")),
-                    );
-                  },
-                  icon: const Icon(Icons.send_rounded, size: 14),
-                  label: const Text("Send Alert", style: TextStyle(fontSize: 12)),
-                ),
-              ),
-            ],
-          );
-        }).toList(),
       ),
     );
   }
 
-  Widget _buildCorrectionsTab() {
-    if (_correctionRequests.isEmpty) {
-      return const Center(child: Text("No attendance correction requests submitted."));
+  Widget _buildCorrectionsTab(List<Map<String, dynamic>> correctionsList) {
+    if (correctionsList.isEmpty) {
+      return const Center(child: Text("No attendance correction requests matching criteria."));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _correctionRequests.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final cr = _correctionRequests[index];
+    final totalItems = correctionsList.length;
+    final totalPages = (totalItems / _pageSize).ceil();
+    final safePage = _correctionsPage > totalPages ? totalPages : (_correctionsPage < 1 ? 1 : _correctionsPage);
+    final pageItems = correctionsList.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: pageItems.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final cr = pageItems[index];
         final isPending = (cr['status'] ?? '').toString().toUpperCase() == 'PENDING';
         return ListTile(
           title: Row(
@@ -1010,7 +1230,20 @@ class _AttendanceMonitoringScreenState extends State<AttendanceMonitoringScreen>
                 )
               : null,
         );
-      },
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: AppPaginationBar(
+            currentPage: safePage,
+            totalPages: totalPages,
+            totalItems: totalItems,
+            pageSize: _pageSize,
+            onPageChanged: (newPage) => setState(() => _correctionsPage = newPage),
+          ),
+        ),
+      ],
     );
   }
 

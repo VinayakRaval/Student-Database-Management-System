@@ -6,9 +6,15 @@ import 'package:frontend/features/notifications/widgets/notification_bell_widget
 
 class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
   final String title;
+  final String? subtitle;
   final VoidCallback onMenuTap;
 
-  const RoleHeader({super.key, required this.title, required this.onMenuTap});
+  const RoleHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.onMenuTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,28 +28,62 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
     final email = user['email'] ?? "No Email";
     final role = (auth.role ?? "Guest").replaceAll('_', ' ');
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallMobile = screenWidth < 480;
+    final isNarrow = screenWidth < 360;
+
     return AppBar(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
       elevation: 0,
-      leading: MediaQuery.of(context).size.width < 900
+      centerTitle: false,
+      shape: Border(
+        bottom: BorderSide(
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      leading: screenWidth < 1024
           ? IconButton(
               icon: Icon(Icons.menu, color: textColor),
               onPressed: onMenuTap,
             )
           : null,
-      title: Text(
-        title,
-        style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.w800,
-          fontSize: 22,
-        ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.w800,
+              fontSize: isSmallMobile ? (isNarrow ? 15 : 17) : 21,
+              letterSpacing: -0.3,
+            ),
+          ),
+          if (subtitle != null && subtitle!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.normal,
+                fontSize: 12.5,
+              ),
+            ),
+          ],
+        ],
       ),
       actions: [
         NotificationBellWidget(iconColor: textColor),
         const SizedBox(width: 8),
         Builder(
           builder: (ctx) => InkWell(
+            borderRadius: BorderRadius.circular(24),
             onTap: () {
               final RenderBox button = ctx.findRenderObject() as RenderBox;
               final RenderBox overlay =
@@ -170,33 +210,47 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
               );
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              margin: const EdgeInsets.only(right: 16),
+              padding: EdgeInsets.symmetric(
+                horizontal: isSmallMobile ? 6 : 10,
+                vertical: 5,
+              ),
+              margin: EdgeInsets.only(right: isNarrow ? 6 : 16),
               decoration: BoxDecoration(
-                color: isDark ? Colors.grey[800] : const Color(0xFFE0E7FF),
-                borderRadius: BorderRadius.circular(30),
+                color: const Color(0xFF13246E),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF13246E).withValues(alpha: 0.25),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Color(0xFF13246E),
-                    child: Icon(Icons.person, size: 20, color: Colors.white),
+                    radius: 13,
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.person, size: 16, color: Color(0xFF13246E)),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    userId,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF13246E),
+                  if (!isSmallMobile) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      userId,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.arrow_drop_down,
-                    color: isDark ? Colors.white : Colors.grey[700],
-                  ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -207,5 +261,5 @@ class RoleHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(70);
+  Size get preferredSize => const Size.fromHeight(64);
 }

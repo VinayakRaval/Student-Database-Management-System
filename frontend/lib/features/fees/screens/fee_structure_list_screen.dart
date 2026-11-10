@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:frontend/core/constants/api_constants.dart';
+import 'package:frontend/core/network/api_client.dart';
 import '../providers/fee_action_provider.dart';
 import '../models/fee_structure_models.dart';
 
@@ -24,6 +25,50 @@ class _FeeStructureListScreenState
     extends ConsumerState<FeeStructureListScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _statusFilter = 'all'; // 'all', 'pending', 'approved', 'rejected'
+
+  int? _selectedDeptId;
+  int? _selectedSemId;
+  int? _selectedYearId;
+  List<Map<String, dynamic>> _departments = [];
+  List<Map<String, dynamic>> _semesters = [];
+  List<Map<String, dynamic>> _academicYears = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDropdownData();
+  }
+
+  Future<void> _fetchDropdownData() async {
+    try {
+      final dio = ApiClient().dio;
+      final deptRes = await dio.get('/academics/departments/');
+      final semRes = await dio.get('/academics/semesters/');
+      final yearRes = await dio.get('/academics/academic-years/');
+      if (mounted) {
+        setState(() {
+          final deptList = deptRes.data is List ? deptRes.data : (deptRes.data['results'] ?? []);
+          _departments = (deptList as List).map<Map<String, dynamic>>((e) => {
+            'id': e['id'],
+            'name': e['name']?.toString() ?? '',
+          }).toList();
+
+          final semList = semRes.data is List ? semRes.data : (semRes.data['results'] ?? []);
+          _semesters = (semList as List).map<Map<String, dynamic>>((e) => {
+            'id': e['id'],
+            'sem_number': e['sem_number'],
+            'name': "Semester ${e['sem_number'] ?? e['id']}",
+          }).toList();
+
+          final yearList = yearRes.data is List ? yearRes.data : (yearRes.data['results'] ?? []);
+          _academicYears = (yearList as List).map<Map<String, dynamic>>((e) => {
+            'id': e['id'],
+            'name': e['name']?.toString() ?? e['year_name']?.toString() ?? '',
+          }).toList();
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -94,6 +139,35 @@ class _FeeStructureListScreenState
                 item.status.toLowerCase() != _statusFilter) {
               return false;
             }
+            // Department dropdown match
+            if (_selectedDeptId != null) {
+              final selDept = _departments.firstWhere((d) => d['id'] == _selectedDeptId, orElse: () => {});
+              final dName = (selDept['name'] ?? '').toString().toLowerCase();
+              if (dName.isNotEmpty &&
+                  !item.department.toLowerCase().contains(dName) &&
+                  !dName.contains(item.department.toLowerCase())) {
+                return false;
+              }
+            }
+            // Semester dropdown match
+            if (_selectedSemId != null) {
+              final selSem = _semesters.firstWhere((s) => s['id'] == _selectedSemId, orElse: () => {});
+              final semNum = selSem['sem_number']?.toString() ?? '';
+              if (semNum.isNotEmpty) {
+                final itemSem = item.semester.toLowerCase();
+                if (!itemSem.contains(semNum)) {
+                  return false;
+                }
+              }
+            }
+            // Academic Year dropdown match
+            if (_selectedYearId != null) {
+              final selYear = _academicYears.firstWhere((y) => y['id'] == _selectedYearId, orElse: () => {});
+              final yName = (selYear['name'] ?? '').toString().toLowerCase();
+              if (yName.isNotEmpty && !item.academicYear.toLowerCase().contains(yName)) {
+                return false;
+              }
+            }
             // Search query match
             if (query.isNotEmpty) {
               final dept = item.department.toLowerCase();
@@ -147,6 +221,112 @@ class _FeeStructureListScreenState
                         ),
                       ),
                       onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+                    // Dropdown filters row: Department, Semester, Academic Year
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          // Department dropdown
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int?>(
+                                value: _selectedDeptId,
+                                hint: const Text("All Departments", style: TextStyle(fontSize: 12, color: Colors.black87)),
+                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text("All Departments", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  ),
+                                  ..._departments.map((d) => DropdownMenuItem<int?>(
+                                    value: d['id'] as int,
+                                    child: Text(d['name'] as String, style: const TextStyle(fontSize: 12)),
+                                  )),
+                                ],
+                                onChanged: (v) => setState(() => _selectedDeptId = v),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Semester dropdown
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int?>(
+                                value: _selectedSemId,
+                                hint: const Text("All Semesters", style: TextStyle(fontSize: 12, color: Colors.black87)),
+                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text("All Semesters", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  ),
+                                  ..._semesters.map((s) => DropdownMenuItem<int?>(
+                                    value: s['id'] as int,
+                                    child: Text(s['name'] as String, style: const TextStyle(fontSize: 12)),
+                                  )),
+                                ],
+                                onChanged: (v) => setState(() => _selectedSemId = v),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Academic Year dropdown
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int?>(
+                                value: _selectedYearId,
+                                hint: const Text("All Academic Years", style: TextStyle(fontSize: 12, color: Colors.black87)),
+                                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text("All Academic Years", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  ),
+                                  ..._academicYears.map((y) => DropdownMenuItem<int?>(
+                                    value: y['id'] as int,
+                                    child: Text(y['name'] as String, style: const TextStyle(fontSize: 12)),
+                                  )),
+                                ],
+                                onChanged: (v) => setState(() => _selectedYearId = v),
+                              ),
+                            ),
+                          ),
+                          if (_selectedDeptId != null || _selectedSemId != null || _selectedYearId != null) ...[
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: const Icon(Icons.clear, size: 18, color: Colors.red),
+                              tooltip: "Reset Dropdown Filters",
+                              onPressed: () {
+                                setState(() {
+                                  _selectedDeptId = null;
+                                  _selectedSemId = null;
+                                  _selectedYearId = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 8),
                     SingleChildScrollView(
@@ -273,7 +453,6 @@ class _FeeStructureCardState extends State<_FeeStructureCard> {
     final item = widget.item;
     final isApproved = item.status.toLowerCase() == 'approved';
     final isRejected = item.status.toLowerCase() == 'rejected';
-    final isPending = item.status.toLowerCase() == 'pending';
 
     final Color statusColor = isApproved
         ? Colors.green
@@ -283,8 +462,7 @@ class _FeeStructureCardState extends State<_FeeStructureCard> {
 
     final Color statusBg = statusColor.withValues(alpha: 0.1);
 
-    final canEdit = widget.userRole == AppRoles.accounts &&
-        (isPending || isRejected);
+    final canEdit = widget.userRole == AppRoles.accounts;
 
     return Container(
       decoration: BoxDecoration(

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from userlogin.models import CustomUser
-from .models import Student
+from .models import Student, StudentAcademicHistory
 from academics.models import Department, Semester, AcademicYear
 from django.db import transaction
 import random, string
@@ -78,6 +78,38 @@ class StudentSerializer(serializers.ModelSerializer):
                         data[f] = int(val.strip())
                     except ValueError:
                         pass
+
+        import json
+        if isinstance(data.get("custom_personal_details"), str):
+            try:
+                data["custom_personal_details"] = json.loads(data["custom_personal_details"])
+            except Exception:
+                pass
+
+        if isinstance(data.get("custom_documents"), str):
+            try:
+                data["custom_documents"] = json.loads(data["custom_documents"])
+            except Exception:
+                pass
+
+        request = self.context.get("request")
+        if request and hasattr(request, "FILES") and request.FILES:
+            from django.core.files.storage import default_storage
+            custom_docs = data.get("custom_documents") or []
+            if not isinstance(custom_docs, list):
+                custom_docs = []
+            for key, uploaded_file in request.FILES.items():
+                if key.startswith("custom_doc_file_") or key.startswith("custom_doc_"):
+                    saved_path = default_storage.save(f"documents/custom/{uploaded_file.name}", uploaded_file)
+                    file_url = default_storage.url(saved_path)
+                    title = request.data.get(f"{key}_title", uploaded_file.name)
+                    custom_docs.append({
+                        "title": title,
+                        "file_url": file_url,
+                        "file_name": uploaded_file.name,
+                    })
+            data["custom_documents"] = custom_docs
+
         return super().to_internal_value(data)
 
     def to_representation(self, instance):
@@ -108,6 +140,17 @@ class StudentSerializer(serializers.ModelSerializer):
                 if obt_val > tot_val:
                     raise serializers.ValidationError({obt: f"{label} obtained marks cannot exceed total marks."})
 
+        # Mandatory fields check on creation
+        if not self.instance:
+            mandatory_fields = ['name', 'dob', 'mobile_no', 'email']
+            errors = {}
+            for field in mandatory_fields:
+                val = attrs.get(field)
+                if val is None or (isinstance(val, str) and not val.strip()):
+                    errors[field] = ["This field is mandatory."]
+            if errors:
+                raise serializers.ValidationError(errors)
+
         return attrs
 
 
@@ -123,6 +166,7 @@ class StudentSerializer(serializers.ModelSerializer):
             "kannada_medium_certificate": obj.kannada_medium_certificate.url if obj.kannada_medium_certificate else None,
             "hyderabad_karnataka_certificate": obj.hyderabad_karnataka_certificate.url if obj.hyderabad_karnataka_certificate else None,
             "kea_acknowledgement": obj.kea_acknowledgement.url if obj.kea_acknowledgement else None,
+            "custom_documents": obj.custom_documents or [],
         }
 
     @transaction.atomic
@@ -162,14 +206,27 @@ class StudentSerializer(serializers.ModelSerializer):
         if cet_no and Student.objects.filter(cet_no=cet_no).exists():
             raise serializers.ValidationError({"cet_no": "A student with this CET number is already registered."})
 
+        request = self.context.get("request")
+        actor = getattr(request, "user", None) if request else None
+
         user = CustomUser.objects.create_user(
             email=email,
             phone=phone,
-            password=None,  # Unusable password until secure activation
+            password=None,
             role='STUDENT',
             department=department,
             force_password_change=True,
-            is_active=False   # Disabled until approved / activated via token
+            is_active=True
+        )
+
+        from userlogin.password_service import set_temporary_password_for_user
+        from userlogin.models import PasswordAuditLog
+
+        temp_password = set_temporary_password_for_user(
+            user=user,
+            actor=actor,
+            action=PasswordAuditLog.ACTION_INITIAL_CREATION,
+            request=request
         )
 
         validated_data['user'] = user
@@ -182,7 +239,8 @@ class StudentSerializer(serializers.ModelSerializer):
             validated_data['registration_status'] = 'pending'
 
         student = Student.objects.create(**validated_data)
-        student.temporary_password = None  # Plaintext password eliminated
+        student._temporary_password = temp_password
+        student.temporary_password = None
         student.save(update_fields=["temporary_password"])
 
         if student.admission_id:
@@ -220,3 +278,15 @@ class StudentSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class StudentAcademicHistorySerializer(serializers.ModelSerializer):
+    semester_number = serializers.IntegerField(source='semester.sem_number', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.year_name', read_only=True)
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    promoted_by_name = serializers.CharField(source='promoted_by.get_full_name', read_only=True)
+
+    class Meta:
+        model = StudentAcademicHistory
+        fields = '__all__'
+

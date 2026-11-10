@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:frontend/core/network/api_client.dart';
+import 'package:frontend/core/widgets/app_pagination_bar.dart';
 import '../models/announcement_model.dart';
 
 class DepartmentAnnouncementsScreen extends StatefulWidget {
@@ -24,6 +25,9 @@ class _DepartmentAnnouncementsScreenState extends State<DepartmentAnnouncementsS
   String _selectedCategory = 'ALL';
   String _selectedHistoryTab = 'ALL';
   String _searchQuery = '';
+
+  int _currentPage = 1;
+  final int _pageSize = 10;
 
   final List<String> _standardCategories = const [
     'ALL',
@@ -96,6 +100,7 @@ class _DepartmentAnnouncementsScreenState extends State<DepartmentAnnouncementsS
       if (mounted) {
         setState(() {
           _announcements = data.map((e) => AnnouncementItem.fromJson(Map<String, dynamic>.from(e))).toList();
+          _currentPage = 1;
           _isLoading = false;
         });
       }
@@ -1495,14 +1500,41 @@ class _DepartmentAnnouncementsScreenState extends State<DepartmentAnnouncementsS
                                             ),
                                           ),
                                         )
-                                      : ListView.separated(
-                                          shrinkWrap: true,
-                                          physics: const NeverScrollableScrollPhysics(),
-                                          itemCount: filteredAnnouncements.length,
-                                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                                          itemBuilder: (context, index) {
-                                            final item = filteredAnnouncements[index];
-                                            return _buildNoticeItem(item);
+                                      : Builder(
+                                          builder: (context) {
+                                            final totalItems = filteredAnnouncements.length;
+                                            final totalPages = totalItems == 0 ? 1 : (totalItems / _pageSize).ceil();
+                                            final safePage = _currentPage > totalPages ? totalPages : (_currentPage < 1 ? 1 : _currentPage);
+                                            final pageItems = totalItems == 0 ? <AnnouncementItem>[] : filteredAnnouncements.skip((safePage - 1) * _pageSize).take(_pageSize).toList();
+
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                ListView.separated(
+                                                  shrinkWrap: true,
+                                                  physics: const NeverScrollableScrollPhysics(),
+                                                  itemCount: pageItems.length,
+                                                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                                  itemBuilder: (context, index) {
+                                                    final item = pageItems[index];
+                                                    return _buildNoticeItem(item);
+                                                  },
+                                                ),
+                                                const SizedBox(height: 16),
+                                                AppPaginationBar(
+                                                  currentPage: safePage,
+                                                  totalPages: totalPages,
+                                                  totalItems: totalItems,
+                                                  pageSize: _pageSize,
+                                                  activeColor: const Color(0xFF13246E),
+                                                  onPageChanged: (newPage) {
+                                                    setState(() {
+                                                      _currentPage = newPage;
+                                                    });
+                                                  },
+                                                ),
+                                              ],
+                                            );
                                           },
                                         ),
                         ),
@@ -1589,22 +1621,43 @@ class _DepartmentAnnouncementsScreenState extends State<DepartmentAnnouncementsS
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6)),
                       child: Text(item.semesterName!, style: TextStyle(color: Colors.teal.shade800, fontWeight: FontWeight.w600, fontSize: 11)),
                     ),
+                  if (item.departmentId == null || (item.authorName != null && item.authorName!.toLowerCase().contains('principal')))
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFF59E0B)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.shield_outlined, size: 12, color: Color(0xFFB45309)),
+                          SizedBox(width: 4),
+                          Text(
+                            "Principal / Campus Notice",
+                            style: TextStyle(color: Color(0xFFB45309), fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black54),
-                    tooltip: "Edit Notice",
-                    onPressed: () => _showCreateEditDialog(item: item),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    tooltip: "Delete Notice",
-                    onPressed: () => _deleteAnnouncement(item.id),
-                  ),
-                ],
-              ),
+              if (item.departmentId != null && !(item.authorName != null && item.authorName!.toLowerCase().contains('principal')))
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black54),
+                      tooltip: "Edit Notice",
+                      onPressed: () => _showCreateEditDialog(item: item),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      tooltip: "Delete Notice",
+                      onPressed: () => _deleteAnnouncement(item.id),
+                    ),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: 10),

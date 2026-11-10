@@ -1,0 +1,35 @@
+# Environment variables & secrets (CRITICAL: NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+
+# Python & Django
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+*.dump
+backend/staticfiles/
+backend/media/
+backend/.venv/
+backend/venv/
+
+# Flutter / Dart
+frontend/.dart_tool/
+frontend/.packages
+frontend/build/
+frontend/*.lock
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.log
+.DS_Store
+Thumbs.db

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:frontend/core/network/api_client.dart';
 import 'package:dio/dio.dart';
+import 'package:frontend/core/utils/validation_utils.dart';
 
 class StudentGrievancesScreen extends StatefulWidget {
   const StudentGrievancesScreen({super.key});
@@ -117,6 +118,19 @@ class _StudentGrievancesScreenState extends State<StudentGrievancesScreen> {
         const SnackBar(content: Text("Please fill in Topic and Description")),
       );
       return;
+    }
+
+    final phoneText = _contactPhoneController.text.trim();
+    if (phoneText.isNotEmpty) {
+      final phoneErr = ValidationUtils.validatePhone(phoneText);
+      if (phoneErr != null) {
+        ValidationUtils.showValidationPopup(
+          context,
+          title: 'Invalid Phone Number',
+          message: phoneErr,
+        );
+        return;
+      }
     }
 
     setState(() => _isSubmitting = true);

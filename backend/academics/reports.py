@@ -22,10 +22,24 @@ class DepartmentReportsView(APIView):
             user_role = "PROFESSOR"
 
         dept = None
+        faculty_obj = None
+        assigned_subject_ids = []
+        is_faculty_scope = request.path.rstrip('/').endswith('reports/faculty') or request.query_params.get('assigned_only') == 'true'
         if user_role == "HOD":
             dept = _resolve_department_for_user(request.user)
             if not dept:
                 return Response({"error": "No department associated with HOD user."}, status=status.HTTP_404_NOT_FOUND)
+            if is_faculty_scope:
+                from timetable.views import _resolve_faculty_for_user
+                faculty_obj = _resolve_faculty_for_user(request.user)
+                if faculty_obj:
+                    assigned_subject_ids = list(SubjectAssignment.objects.filter(faculty=faculty_obj).values_list("subject_id", flat=True))
+        elif user_role == "PROFESSOR":
+            from timetable.views import _resolve_faculty_for_user
+            faculty_obj = _resolve_faculty_for_user(request.user)
+            if faculty_obj:
+                dept = faculty_obj.department
+                assigned_subject_ids = list(SubjectAssignment.objects.filter(faculty=faculty_obj).values_list("subject_id", flat=True))
         elif user_role in ["PRINCIPAL", "SYSTEM"] or request.user.is_superuser:
             dept_id = request.query_params.get("department_id")
             if dept_id:
@@ -39,10 +53,24 @@ class DepartmentReportsView(APIView):
         end_date = request.query_params.get("end_date")
         q = (request.query_params.get("q") or "").strip()
 
+        assigned_subjects_list = []
+        if faculty_obj:
+            assignments = SubjectAssignment.objects.filter(faculty=faculty_obj).select_related("subject", "semester", "department")
+            for a in assignments:
+                assigned_subjects_list.append({
+                    "id": a.subject.id,
+                    "code": a.subject.subject_code,
+                    "name": a.subject.subject_name,
+                    "semester_id": a.semester.id if a.semester else None,
+                    "semester_num": a.semester.sem_number if a.semester else (a.subject.semester.sem_number if a.subject.semester else None),
+                    "department_name": a.department.name if a.department else (a.subject.department.name if a.subject.department else ""),
+                })
+
         dept_info = {
             "id": dept.id if dept else None,
             "name": dept.name if dept else ("All Departments" if user_role in ["PRINCIPAL", "SYSTEM"] else "General Department"),
             "code": getattr(dept, "code", dept.name if dept else "ALL"),
+            "faculty_name": faculty_obj.name if faculty_obj else "",
             "user_email": request.user.email or getattr(request.user, "user_id", "") or str(request.user),
             "user_role": user_role,
         }
@@ -50,7 +78,13 @@ class DepartmentReportsView(APIView):
         # 1. Department Student Report
         if report_type == "STUDENTS":
             qs = Student.objects.all()
-            if dept:
+            if user_role == "PROFESSOR":
+                dept_ids = list(SubjectAssignment.objects.filter(faculty=faculty_obj).values_list("department_id", flat=True))
+                sem_ids = list(SubjectAssignment.objects.filter(faculty=faculty_obj).values_list("semester_id", flat=True))
+                if faculty_obj and faculty_obj.department_id:
+                    dept_ids.append(faculty_obj.department_id)
+                qs = qs.filter(department_id__in=dept_ids, semester_id__in=sem_ids)
+            elif dept:
                 qs = qs.filter(department=dept)
             if semester_id:
                 qs = qs.filter(semester_id=semester_id)
@@ -75,8 +109,9 @@ class DepartmentReportsView(APIView):
             columns = ["USN", "Name", "Semester", "Department", "Status", "Gender", "Email", "Phone"]
             return Response({
                 "department_info": dept_info,
+                "assigned_subjects": assigned_subjects_list,
                 "report_type": report_type,
-                "title": "Department Student Report",
+                "title": "Faculty Student Roster Report" if user_role == "PROFESSOR" else "Department Student Report",
                 "columns": columns,
                 "rows": rows,
                 "summary": {
@@ -146,9 +181,11 @@ class DepartmentReportsView(APIView):
             })
 
         # 3. Attendance Report
-        elif report_type == "ATTENDANCE":
+        elif report_type in ["ATTENDANCE", "LOW_ATTENDANCE"]:
             records = AttendanceRecord.objects.all()
-            if dept:
+            if user_role == "PROFESSOR":
+                records = records.filter(session__subject_id__in=assigned_subject_ids)
+            elif dept:
                 records = records.filter(Q(session__subject__department=dept) | Q(student__department=dept))
             if semester_id:
                 records = records.filter(student__semester_id=semester_id)
@@ -171,11 +208,18 @@ class DepartmentReportsView(APIView):
                 .order_by("student__usn")
             )
 
+            try:
+                threshold = float(request.query_params.get("threshold", 75.0))
+            except (ValueError, TypeError):
+                threshold = 75.0
+
             rows = []
             for st in student_stats:
                 total = st["total"]
                 present = st["present"]
                 pct = round((present / total * 100), 1) if total > 0 else 0.0
+                if report_type == "LOW_ATTENDANCE" and pct >= threshold:
+                    continue
                 rows.append({
                     "usn": st["student__usn"],
                     "name": st["student__name"],
@@ -184,17 +228,24 @@ class DepartmentReportsView(APIView):
                     "total_classes": total,
                     "attended_classes": present,
                     "percentage": pct,
-                    "status": "Shortage (<75%)" if pct < 75.0 else "Eligible (>=75%)",
+                    "status": f"Shortage (<{int(threshold)}%)" if pct < threshold else f"Eligible (>={int(threshold)}%)",
                 })
             columns = ["USN", "Name", "Semester", "Subject", "Total Classes", "Attended", "Percentage", "Status"]
             total_rec = len(rows)
-            shortage = sum(1 for r in rows if r["percentage"] < 75.0)
+            shortage = sum(1 for r in rows if r["percentage"] < threshold)
             eligible = total_rec - shortage
             avg_att = round(sum(r["percentage"] for r in rows) / total_rec, 1) if total_rec > 0 else 0.0
+            
+            report_title = f"Low Attendance Alert (<{int(threshold)}%)" if report_type == "LOW_ATTENDANCE" else (
+                "Faculty Attendance Report" if user_role == "PROFESSOR" else "Department Attendance Report"
+            )
+
             return Response({
                 "department_info": dept_info,
+                "assigned_subjects": assigned_subjects_list,
                 "report_type": report_type,
-                "title": "Department Attendance Report",
+                "title": report_title,
+                "threshold": threshold,
                 "columns": columns,
                 "rows": rows,
                 "summary": {
@@ -204,17 +255,19 @@ class DepartmentReportsView(APIView):
                     "card1_value": total_rec,
                     "card2_label": "Average Attendance",
                     "card2_value": f"{avg_att}%",
-                    "card3_label": "Eligible (>=75%)",
+                    "card3_label": f"Eligible (>={int(threshold)}%)",
                     "card3_value": eligible,
-                    "card4_label": "Shortage (<75%)",
+                    "card4_label": f"Shortage (<{int(threshold)}%)",
                     "card4_value": shortage,
                 }
             })
 
         # 4. IA Performance Report
-        elif report_type == "IA_PERFORMANCE":
+        elif report_type in ["IA_PERFORMANCE", "LOW_MARKS"]:
             marks = IAMark.objects.all().select_related("student", "ia_test", "ia_test__subject")
-            if dept:
+            if user_role == "PROFESSOR":
+                marks = marks.filter(ia_test__subject_id__in=assigned_subject_ids)
+            elif dept:
                 marks = marks.filter(Q(ia_test__subject__department=dept) | Q(student__department=dept))
             if semester_id:
                 marks = marks.filter(student__semester_id=semester_id)
@@ -229,6 +282,8 @@ class DepartmentReportsView(APIView):
                 obtained = float(m.obtained_marks)
                 pct = round((obtained / max_m * 100), 1)
                 passed = pct >= 40.0
+                if report_type == "LOW_MARKS" and passed:
+                    continue
                 rows.append({
                     "usn": m.student.usn,
                     "name": m.student.name,
@@ -246,10 +301,16 @@ class DepartmentReportsView(APIView):
             passed_cnt = sum(1 for r in rows if r["percentage"] >= 40.0)
             support_cnt = total_m - passed_cnt
             pass_rate = round(passed_cnt / total_m * 100, 1) if total_m > 0 else 0.0
+
+            ia_title = "Students Needing Academic Support (<40%)" if report_type == "LOW_MARKS" else (
+                "Faculty IA Performance Report" if user_role == "PROFESSOR" else "IA & Academic Performance Report"
+            )
+
             return Response({
                 "department_info": dept_info,
+                "assigned_subjects": assigned_subjects_list,
                 "report_type": report_type,
-                "title": "IA & Academic Performance Report",
+                "title": ia_title,
                 "columns": columns,
                 "rows": rows,
                 "summary": {
@@ -270,7 +331,9 @@ class DepartmentReportsView(APIView):
         # 5. Subject and Timetable Report
         elif report_type == "TIMETABLE":
             assignments = SubjectAssignment.objects.all().select_related("subject", "faculty", "department", "semester")
-            if dept:
+            if user_role == "PROFESSOR":
+                assignments = assignments.filter(faculty=faculty_obj)
+            elif dept:
                 assignments = assignments.filter(Q(department=dept) | Q(subject__department=dept))
             if semester_id:
                 assignments = assignments.filter(semester_id=semester_id)
@@ -300,8 +363,9 @@ class DepartmentReportsView(APIView):
             staffed = sum(1 for r in rows if r["faculty_name"] != "Unassigned")
             return Response({
                 "department_info": dept_info,
+                "assigned_subjects": assigned_subjects_list,
                 "report_type": report_type,
-                "title": "Subject and Timetable Report",
+                "title": "Faculty Teaching Schedule Report" if user_role == "PROFESSOR" else "Subject and Timetable Report",
                 "columns": columns,
                 "rows": rows,
                 "summary": {
@@ -320,7 +384,13 @@ class DepartmentReportsView(APIView):
         # 6. Semester Progression Report
         elif report_type == "PROGRESSION":
             qs = Student.objects.filter(status__iexact="active")
-            if dept:
+            if user_role == "PROFESSOR":
+                dept_ids = list(SubjectAssignment.objects.filter(faculty=faculty_obj).values_list("department_id", flat=True))
+                sem_ids = list(SubjectAssignment.objects.filter(faculty=faculty_obj).values_list("semester_id", flat=True))
+                if faculty_obj and faculty_obj.department_id:
+                    dept_ids.append(faculty_obj.department_id)
+                qs = qs.filter(department_id__in=dept_ids, semester_id__in=sem_ids)
+            elif dept:
                 qs = qs.filter(department=dept)
             if semester_id:
                 qs = qs.filter(semester_id=semester_id)
@@ -361,6 +431,7 @@ class DepartmentReportsView(APIView):
             backlog_cnt = sum(1 for r in rows if "backlog" in r["academic_status"].lower())
             return Response({
                 "department_info": dept_info,
+                "assigned_subjects": assigned_subjects_list,
                 "report_type": report_type,
                 "title": "Semester Progression Report",
                 "columns": columns,

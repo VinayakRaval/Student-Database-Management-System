@@ -36,6 +36,19 @@ class _ResponsiveShellState extends State<ResponsiveShell> {
     if (path.startsWith('/library/feedback')) return 'Feedback';
     if (path.startsWith('/library/officer')) return 'Dashboard';
     if (path.startsWith('/profile')) return 'Profile';
+    if (path.startsWith('/fees/dashboard')) return 'Accounts Dashboard';
+    if (path.startsWith('/fees/student-payments')) return 'Verify Payments';
+    if (path.startsWith('/fees/students')) return 'Student Fee Directory';
+    if (path.startsWith('/fees/record-payment')) return 'Record Payment';
+    if (path.startsWith('/fees/uploaded-files')) return 'Uploaded Fee Proofs';
+    if (path.startsWith('/fees/reports')) return 'Financial Reports';
+    if (path.startsWith('/fees/notifications')) return 'Principal Directives';
+    if (path.startsWith('/fees')) return 'Fee Structures';
+    if (path.startsWith('/admissions/notifications')) return 'Principal Directives & Notifications';
+    if (path.startsWith('/announcements/campus')) return 'Campus Announcements';
+    if (path.startsWith('/student/corrections')) return 'Correction Center';
+    if (path.startsWith('/corrections/review')) return 'Correction Requests Review';
+    if (path.startsWith('/grievances') || path.startsWith('/student/grievances')) return 'Grievances';
 
     final menu = RoleMenus.getMenu(role);
     for (final item in menu) {
@@ -54,9 +67,20 @@ class _ResponsiveShellState extends State<ResponsiveShell> {
     return 'Dashboard';
   }
 
+  String? _resolveSubtitle(String role, String activePath) {
+    final path = activePath.isNotEmpty ? activePath : (widget.currentPath ?? '');
+    if (path.startsWith('/fees/reports')) return 'View and manage fee collections and reports';
+    if (path.startsWith('/fees/dashboard')) return 'Overview of institutional fee collections & metrics';
+    if (path.startsWith('/fees/student-payments')) return 'Audit and verify student fee payment submissions';
+    if (path.startsWith('/fees/uploaded-files')) return 'Review student-uploaded screenshots & transaction proofs';
+    if (path.startsWith('/fees/record-payment')) return 'Record direct physical counter and DD payments';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 900;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1024;
     final role = context.watch<AuthProvider>().role ?? 'STUDENT';
 
     String activePath = widget.currentPath ?? '';
@@ -65,16 +89,25 @@ class _ResponsiveShellState extends State<ResponsiveShell> {
     } catch (_) {}
 
     final pageTitle = _resolveTitle(role, activePath);
+    final pageSubtitle = _resolveSubtitle(role, activePath);
 
     if (isDesktop) {
       return Scaffold(
         body: Row(
           children: [
-            RoleSidebar(role: role, collapsed: _isSidebarCollapsed),
+            RoleSidebar(
+              role: role,
+              collapsed: _isSidebarCollapsed,
+              currentPath: activePath,
+            ),
             Expanded(
               child: Column(
                 children: [
-                  RoleHeader(title: pageTitle, onMenuTap: () {}),
+                  RoleHeader(
+                    title: pageTitle,
+                    subtitle: pageSubtitle,
+                    onMenuTap: () {},
+                  ),
                   Expanded(child: widget.child),
                 ],
               ),
@@ -83,17 +116,20 @@ class _ResponsiveShellState extends State<ResponsiveShell> {
         ),
         floatingActionButton: Padding(
           padding: const EdgeInsets.only(left: 20),
-          child: FloatingActionButton.small(
-            backgroundColor: Colors.white,
-            foregroundColor: const Color(0xFF13246E),
-            child: Icon(
-              _isSidebarCollapsed
-                  ? Icons.arrow_forward_ios
-                  : Icons.arrow_back_ios,
-              size: 14,
+          child: Transform.translate(
+            offset: const Offset(0, 8),
+            child: FloatingActionButton.small(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF13246E),
+              child: Icon(
+                _isSidebarCollapsed
+                    ? Icons.arrow_forward_ios
+                    : Icons.arrow_back_ios,
+                size: 14,
+              ),
+              onPressed: () =>
+                  setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
             ),
-            onPressed: () =>
-                setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
           ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
@@ -103,12 +139,17 @@ class _ResponsiveShellState extends State<ResponsiveShell> {
         key: _scaffoldKey,
         appBar: RoleHeader(
           title: pageTitle,
+          subtitle: pageSubtitle,
           onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         drawer: Drawer(
-          width: 260,
+          width: screenWidth < 320 ? screenWidth * 0.85 : 260,
           backgroundColor: Colors.transparent,
-          child: RoleSidebar(role: role, collapsed: false),
+          child: RoleSidebar(
+            role: role,
+            collapsed: false,
+            currentPath: activePath,
+          ),
         ),
         body: widget.child,
       );

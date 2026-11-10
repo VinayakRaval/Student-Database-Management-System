@@ -65,9 +65,25 @@ class Faculty(models.Model):
     role = models.CharField(
         max_length=50, choices=ROLE_CHOICES, null=True, blank=True
     )
+    designation = models.CharField(
+        max_length=150, null=True, blank=True, default="Professor"
+    )
 
     photo = models.ImageField(upload_to="photos/", null=True, blank=True)
     signature = models.ImageField(upload_to="faculty_signatures/", null=True, blank=True)
+
+    employment_type = models.CharField(
+        max_length=50,
+        choices=[
+            ("PERMANENT", "Permanent"),
+            ("GUEST", "Guest Faculty"),
+        ],
+        default="PERMANENT",
+        null=True,
+        blank=True,
+    )
+    is_guest_faculty = models.BooleanField(default=False)
+    date_of_joining = models.DateField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -76,10 +92,25 @@ class Faculty(models.Model):
     )
     registration_date = models.DateTimeField(default=timezone.now)
     approved_date = models.DateTimeField(null=True, blank=True)
+    temp_password = EncryptedCharField(max_length=128, null=True, blank=True)
+    password_setup_completed_at = models.DateTimeField(null=True, blank=True)
 
     # Automatically populate the existing database timestamp columns.
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.is_guest_faculty or self.employment_type == "GUEST" or (self.designation and "guest" in str(self.designation).lower()):
+            self.employment_type = "GUEST"
+            self.is_guest_faculty = True
+            if not self.designation:
+                self.designation = "Guest Faculty"
+        else:
+            self.employment_type = "PERMANENT"
+            self.is_guest_faculty = False
+            if not self.designation:
+                self.designation = "Professor" 
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.faculty_id} - {self.name}"

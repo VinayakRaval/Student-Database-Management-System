@@ -66,3 +66,42 @@ class Schema(TimestampedModel):
             f"{self.name} "
             f"({self.department.name if self.department else 'No Department'})"
         )
+
+
+class SemesterFinalization(TimestampedModel):
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="finalized_semesters",
+    )
+    semester = models.ForeignKey(
+        Semester,
+        on_delete=models.CASCADE,
+        related_name="finalized_semesters",
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name="finalized_semesters",
+    )
+    is_finalized = models.BooleanField(default=False)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    finalized_by = models.ForeignKey(
+        'userlogin.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authorized_finalizations",
+    )
+    remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "semester_finalization"
+        unique_together = ("department", "semester", "academic_year")
+        verbose_name = "Semester Finalization"
+        verbose_name_plural = "Semester Finalizations"
+
+    def __str__(self):
+        status = "FINALIZED" if self.is_finalized else "OPEN"
+        return f"{self.department.name} - Sem {self.semester.sem_number} ({self.academic_year.year_name}) [{status}]"
+

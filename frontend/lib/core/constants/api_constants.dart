@@ -9,6 +9,7 @@ class AppRoles {
   static const String scholarship = 'SCHOLARSHIP';
   static const String library = 'LIBRARY';
   static const String system = 'SYSTEM';
+  static const String placementOfficer = 'PLACEMENT_OFFICER';
 }
 
 class ApiConstants {

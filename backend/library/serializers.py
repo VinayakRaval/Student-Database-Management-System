@@ -251,6 +251,8 @@ class LibraryCardSerializer(serializers.ModelSerializer):
     signature_image_url = serializers.SerializerMethodField()
     hod_signature_image_url = serializers.SerializerMethodField()
     circulation_rows = serializers.SerializerMethodField()
+    continuation_cards = serializers.SerializerMethodField()
+    parent_card_number = serializers.CharField(source='parent_card.card_number', read_only=True, default=None)
 
     class Meta:
         model = LibraryCard
@@ -263,11 +265,14 @@ class LibraryCardSerializer(serializers.ModelSerializer):
             'circulation_rows', 'card_fee', 'fee_paid', 'fee_payment_reference',
             'fee_paid_at', 'status', 'rejection_reason', 'hod_verified_by', 'hod_name',
             'hod_verified_at', 'submitted_at', 'issued_by', 'issued_by_name', 'issued_at', 'valid_until',
-            'digital_signature_hash', 'qr_code_token', 'created_at', 'updated_at'
+            'digital_signature_hash', 'qr_code_token', 'parent_card', 'parent_card_number',
+            'continuation_index', 'continuation_cards', 'created_at', 'updated_at'
         ]
         read_only_fields = (
             'card_number', 'status', 'rejection_reason', 'hod_verified_by', 'hod_verified_at',
-            'issued_by', 'issued_at', 'digital_signature_hash', 'qr_code_token', 'created_at', 'updated_at'
+            'issued_by', 'issued_at', 'digital_signature_hash', 'qr_code_token',
+            'parent_card', 'parent_card_number', 'continuation_index', 'continuation_cards',
+            'created_at', 'updated_at'
         )
 
     def get_borrower_name(self, obj):
@@ -326,6 +331,17 @@ class LibraryCardSerializer(serializers.ModelSerializer):
             return obj.hod_signature_image.url
         return None
 
+    def get_continuation_cards(self, obj):
+        root = obj.parent_card if obj.parent_card else obj
+        cards = [root] + list(root.continuation_cards.all().order_by('continuation_index'))
+        return [{
+            'id': c.id,
+            'card_number': c.card_number,
+            'continuation_index': c.continuation_index,
+            'status': c.status,
+            'is_current': c.id == obj.id,
+        } for c in cards]
+
     def get_circulation_rows(self, obj):
         if obj.recorded_books and isinstance(obj.recorded_books, list) and len(obj.recorded_books) > 0:
             rows = []
@@ -343,7 +359,7 @@ class LibraryCardSerializer(serializers.ModelSerializer):
 
         rows = []
         if user:
-            issues = IssueRecord.objects.filter(borrower=user).select_related('copy', 'copy__book').order_by('-issued_at')[:8]
+            issues = IssueRecord.objects.filter(borrower=user).select_related('copy', 'copy__book', 'created_by').order_by('issued_at')
             for idx, issue in enumerate(issues, start=1):
                 rows.append({
                     'serial_no': idx,
@@ -351,9 +367,12 @@ class LibraryCardSerializer(serializers.ModelSerializer):
                     'book_title': issue.copy.book.title if (issue.copy and issue.copy.book) else 'Book',
                     'book_copy_no': issue.copy.barcode or f"Copy #{issue.copy.copy_number}" if issue.copy else '',
                     'issued_date': issue.issued_at.strftime('%Y-%m-%d') if issue.issued_at else '',
-                    'return_date': issue.returned_at.strftime('%Y-%m-%d') if issue.returned_at else (issue.due_date.strftime('%Y-%m-%d') if issue.due_date else ''),
+                    'due_date': issue.due_date.strftime('%Y-%m-%d') if issue.due_date else '',
+                    'return_date': issue.returned_at.strftime('%Y-%m-%d') if issue.returned_at else '',
+                    'librarian_signature': issue.created_by.get_full_name() if issue.created_by else 'Librarian (Digital Stamp)',
                     'status': issue.status,
                     'is_signed': True,
+                    'is_returned': issue.returned_at is not None,
                 })
         return rows
 

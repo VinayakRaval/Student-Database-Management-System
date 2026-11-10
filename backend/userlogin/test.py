@@ -108,29 +108,21 @@ class UserLoginTests(APITestCase):
         self.assertTrue(self.user.check_password("updated123"))
 
     # ---------------------------------------------------------
-    # 7. PASSWORD RESET REQUEST (OTP)
+    # 7. PASSWORD RESET REQUEST (DEACTIVATED DUE TO EMAIL REMOVAL)
     # ---------------------------------------------------------
-    @patch("userlogin.utils.send_otp_email")
-    def test_password_reset_request(self, mock_send_email):
-        mock_send_email.return_value = True
-
+    def test_password_reset_request(self):
         url = reverse("password-reset-request")
         payload = {"email": "user@test.com"}
 
         res = self.client.post(url, payload, format="json")
 
-        self.assertEqual(res.status_code, 200)
-        self.assertTrue(PasswordResetOTP.objects.filter(user=self.user).exists())
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("deactivated", str(res.data).lower())
 
     # ---------------------------------------------------------
-    # 8. PASSWORD RESET VERIFY
+    # 8. PASSWORD RESET VERIFY (DEACTIVATED)
     # ---------------------------------------------------------
     def test_password_reset_verify(self):
-        otp_obj = PasswordResetOTP.objects.create(
-            user=self.user,
-            otp="999999"
-        )
-
         url = reverse("password-reset-verify")
         payload = {
             "email": "user@test.com",
@@ -139,11 +131,7 @@ class UserLoginTests(APITestCase):
         }
 
         res = self.client.post(url, payload, format="json")
-        self.assertEqual(res.status_code, 200)
-
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("abc12345"))
-        self.assertFalse(PasswordResetOTP.objects.filter(otp="999999").exists())
+        self.assertIn(res.status_code, [400, 404])
 
     # ---------------------------------------------------------
     # 9. PASSWORD RESET INVALID OTP
@@ -169,4 +157,4 @@ class UserLoginTests(APITestCase):
 
         res = self.client.post(url, payload, format="json")
         self.assertEqual(res.status_code, 400)
-        self.assertIn("valid email", str(res.data).lower())
+        self.assertIn("deactivated", str(res.data).lower())

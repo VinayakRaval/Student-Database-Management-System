@@ -31,14 +31,33 @@ class ExternalResultListCreateView(generics.ListCreateAPIView):
         return context
 
     def create(self, request, *args, **kwargs):
-    # Block staff BEFORE serializer validation
-     if request.user.role == "HOD":
-        return Response(
-            {"detail": "Only students can upload results."},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        # Block staff BEFORE serializer validation
+        if request.user.role == "HOD":
+            return Response(
+                {"detail": "Only students can upload results."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-     return super().create(request, *args, **kwargs)
+        # Check if target semester is finalized and locked
+        sem_num = request.data.get('semester')
+        if sem_num:
+            from academics.models import SemesterFinalization, Semester
+            student_profile = getattr(request.user, 'student', None)
+            if student_profile and student_profile.department:
+                sem_obj = Semester.objects.filter(sem_number=sem_num).first()
+                if sem_obj:
+                    is_finalized = SemesterFinalization.objects.filter(
+                        department=student_profile.department,
+                        semester=sem_obj,
+                        is_finalized=True
+                    ).exists()
+                    if is_finalized:
+                        return Response(
+                            {"detail": "Semester Completed – Marks Locked. Results for finalized semesters cannot be uploaded or overwritten."},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+
+        return super().create(request, *args, **kwargs)
 
 
 class ExternalResultRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -51,9 +70,11 @@ class ExternalResultRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIV
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrHOD]
 
     def perform_update(self, serializer):
-        # capture previous info for changelog
         obj = self.get_object()
+        if obj.is_locked:
+            raise PermissionDenied("Semester Completed – Marks Locked. External results are permanently finalized.")
         prev_summary = f"Previous file: {obj.pdf_file.name if obj.pdf_file else 'N/A'}; semester: {obj.semester}; exam_type: {obj.exam_type}; status: {obj.status}"
+
         
         user = self.request.user
         extra_kwargs = {}
@@ -86,6 +107,8 @@ class ExternalResultRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIV
             )
 
     def perform_destroy(self, instance):
+        if instance.is_locked:
+            raise PermissionDenied("Semester Completed – Marks Locked. External results cannot be deleted.")
         # store info for changelog before delete
         prev_summary = f"Deleted file: {instance.pdf_file.name if instance.pdf_file else 'N/A'}; semester: {instance.semester}; exam_type: {instance.exam_type}"
         actor = self.request.user
@@ -113,12 +136,18 @@ class VerifyExternalResultView(generics.GenericAPIView):
 
     def post(self, request, pk=None):
         result = get_object_or_404(ExternalResult, pk=pk)
+        if result.is_locked:
+            return Response(
+                {"detail": "Semester Completed – Marks Locked. External results are permanently finalized and cannot be modified."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         user = request.user
         if getattr(user, 'role', '') != 'HOD' and not user.is_staff:
             return Response(
                 {"detail": "Only HOD or Exam Coordinator can verify semester marksheets."},
                 status=status.HTTP_403_FORBIDDEN
             )
+
 
         status_val = request.data.get('status', 'VERIFIED')
         sgpa_val = request.data.get('sgpa', result.sgpa)

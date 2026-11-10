@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -107,11 +106,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Center(child: Text("Error: $_error"))
                 else if (_dashboardData != null &&
                     _dashboardData!['cards'] != null &&
-                    (_dashboardData!['cards'] as List).isNotEmpty)
+                    (_dashboardData!['cards'] as List).isNotEmpty) ...[
                   _buildCards(
                     _dashboardData!['cards'] as List,
                     constraints.maxWidth,
-                  )
+                  ),
+                  if (role.toUpperCase() == AppRoles.professor || role.toUpperCase() == AppRoles.hod) ...[
+                    const SizedBox(height: 32),
+                    _buildProfessorExtraSections(context, isDark, constraints.maxWidth),
+                  ],
+                ]
                 else
                   _buildFallbackCards(context, role, constraints.maxWidth),
               ],
@@ -175,7 +179,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'value': 'Curriculum',
           'icon': 'book',
           'color': 'blue',
-          'route': '/subjects',
+          'route': '/subjects/department',
         },
         {
           'title': 'Attendance',
@@ -233,35 +237,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'route': '/subjects',
         },
         {
+          'title': 'My Students',
+          'value': 'Directory',
+          'icon': 'people',
+          'color': 'navy',
+          'route': '/faculty/students',
+        },
+        {
           'title': 'Mark Attendance',
           'value': 'Today',
           'icon': 'check',
           'color': 'green',
           'route': '/attendance/faculty',
         },
+        {
+          'title': 'IA Assessment',
+          'value': 'Evaluation',
+          'icon': 'grade',
+          'color': 'purple',
+          'route': '/ia/faculty',
+        },
+        {
+          'title': 'Academic Reports',
+          'value': 'Analytics',
+          'icon': 'analytics',
+          'color': 'teal',
+          'route': '/faculty/reports',
+        },
       ];
     } else if (upperRole == AppRoles.accounts) {
       cards = [
         {
-          'title': 'Fee Structures',
-          'value': 'Active',
+          'title': 'Accounts Hub',
+          'value': 'Dashboard',
           'icon': 'monetization',
           'color': 'green',
-          'route': '/fees',
+          'route': '/fees/dashboard',
+        },
+        {
+          'title': 'Student Fees',
+          'value': 'Directory',
+          'icon': 'people',
+          'color': 'navy',
+          'route': '/fees/students',
+        },
+        {
+          'title': 'Record Payment',
+          'value': 'Collect',
+          'icon': 'add',
+          'color': 'blue',
+          'route': '/fees/record-payment',
         },
         {
           'title': 'Pending Payments',
-          'value': 'Review',
+          'value': 'Verify',
           'icon': 'pending',
           'color': 'orange',
           'route': '/fees/student-payments',
         },
         {
-          'title': 'Quick Action',
-          'value': 'Create Fee',
-          'icon': 'add',
-          'color': 'blue',
-          'route': '/fees/create',
+          'title': 'Financial Reports',
+          'value': 'Audit & Exports',
+          'icon': 'analytics',
+          'color': 'teal',
+          'route': '/fees/reports',
+        },
+        {
+          'title': 'Principal Directives',
+          'value': 'Directives & Orders',
+          'icon': 'notifications',
+          'color': 'purple',
+          'route': '/fees/notifications',
         },
       ];
     } else if (upperRole == AppRoles.admission) {
@@ -390,6 +436,681 @@ class _DashboardScreenState extends State<DashboardScreen> {
       default:
         return const Color(0xFF13246E);
     }
+  }
+
+  Widget _buildProfessorExtraSections(
+    BuildContext context,
+    bool isDark,
+    double availableWidth,
+  ) {
+    final todayClasses = (_dashboardData?['today_classes'] as List?) ?? [];
+    final announcements = (_dashboardData?['recent_announcements'] as List?) ?? [];
+    final unmarkedCount = _dashboardData?['unmarked_classes_today'] ?? 0;
+    final pendingCorrections = _dashboardData?['pending_corrections'] ?? 0;
+    final activeIaTests = _dashboardData?['active_ia_tests'] ?? 0;
+
+    final isWide = availableWidth > 900;
+
+    final leftColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTodayTimetableCard(context, todayClasses, isDark),
+        const SizedBox(height: 24),
+        _buildPendingTasksCard(
+          context,
+          unmarkedCount,
+          pendingCorrections,
+          activeIaTests,
+          isDark,
+        ),
+      ],
+    );
+
+    final rightColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildQuickActionsCard(context, isDark),
+        const SizedBox(height: 24),
+        _buildAnnouncementsCard(context, announcements, isDark),
+      ],
+    );
+
+    if (isWide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: leftColumn),
+          const SizedBox(width: 24),
+          Expanded(flex: 2, child: rightColumn),
+        ],
+      );
+    } else {
+      return Column(
+        children: [
+          leftColumn,
+          const SizedBox(height: 24),
+          rightColumn,
+        ],
+      );
+    }
+  }
+
+  Widget _buildTodayTimetableCard(
+    BuildContext context,
+    List todayClasses,
+    bool isDark,
+  ) {
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF13246E).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.schedule_rounded, color: Color(0xFF13246E), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Today's Teaching Schedule",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "${todayClasses.length} assigned session(s) today",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => context.go('/timetable/my-schedule'),
+                icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                label: const Text("Full Schedule"),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF13246E),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          if (todayClasses.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.event_available_rounded,
+                    size: 36,
+                    color: isDark ? Colors.white38 : Colors.black26,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "No classes scheduled for today.",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: todayClasses.length,
+              separatorBuilder: (_, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final cls = todayClasses[index];
+                final slotId = cls['slot_id'];
+                final subName = cls['subject_name'] ?? 'Subject';
+                final subCode = cls['subject_code'] ?? '';
+                final startTime = cls['start_time'] ?? '';
+                final endTime = cls['end_time'] ?? '';
+                final sem = cls['semester'] ?? '';
+                final dept = cls['department'] ?? '';
+                final isMarked = cls['is_attendance_marked'] == true;
+
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isMarked
+                          ? const Color(0xFF86EFAC).withOpacity(0.4)
+                          : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF13246E).withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFF13246E)),
+                            const SizedBox(height: 4),
+                            Text(
+                              startTime,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF13246E),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              subCode.isNotEmpty ? "$subCode - $subName" : subName,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "$sem ${dept.isNotEmpty ? '• $dept' : ''} ($startTime - $endTime)",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.white60 : Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (isMarked)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
+                              SizedBox(width: 4),
+                              Text(
+                                "Marked",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF16A34A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            context.go('/attendance/mark/$slotId', extra: subName);
+                          },
+                          icon: const Icon(Icons.check_rounded, size: 14),
+                          label: const Text("Mark Attendance"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF13246E),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingTasksCard(
+    BuildContext context,
+    dynamic unmarkedCount,
+    dynamic pendingCorrections,
+    dynamic activeIaTests,
+    bool isDark,
+  ) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isHod = (auth.role ?? '').toUpperCase() == AppRoles.hod;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.pending_actions_rounded, color: Color(0xFFD97706), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                "Pending Academic Tasks",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          _buildTaskRow(
+            title: "Classes Awaiting Attendance",
+            subtitle: "$unmarkedCount class(es) today require attendance submission",
+            count: "$unmarkedCount",
+            isUrgent: (unmarkedCount as num? ?? 0) > 0,
+            btnLabel: "Attendance",
+            onTap: () => context.go('/attendance/faculty'),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 12),
+          _buildTaskRow(
+            title: "Active IA Test Evaluations",
+            subtitle: "$activeIaTests test assessment(s) open for marks entry",
+            count: "$activeIaTests",
+            isUrgent: (activeIaTests as num? ?? 0) > 0,
+            btnLabel: "Enter Marks",
+            onTap: () => context.go('/ia/faculty'),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 12),
+          _buildTaskRow(
+            title: "Attendance Corrections Pending",
+            subtitle: "$pendingCorrections request(s) awaiting HOD review",
+            count: "$pendingCorrections",
+            isUrgent: false,
+            btnLabel: "View Status",
+            onTap: () => context.go(isHod ? '/attendance/monitoring' : '/attendance/faculty'),
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTaskRow({
+    required String title,
+    required String subtitle,
+    required String count,
+    required bool isUrgent,
+    required String btnLabel,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isUrgent ? const Color(0xFFFEE2E2) : const Color(0xFFE2E8F0),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              count,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isUrgent ? const Color(0xFFDC2626) : const Color(0xFF334155),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          OutlinedButton(
+            onPressed: onTap,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              side: const BorderSide(color: Color(0xFF13246E)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            child: Text(
+              btnLabel,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF13246E), fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsCard(BuildContext context, bool isDark) {
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    final actions = [
+      {'title': 'My Subjects', 'icon': Icons.library_books_rounded, 'color': const Color(0xFF13246E), 'route': '/subjects'},
+      {'title': 'My Students', 'icon': Icons.people_alt_rounded, 'color': const Color(0xFF0D9488), 'route': '/faculty/students'},
+      {'title': 'IA Assessment', 'icon': Icons.grade_rounded, 'color': const Color(0xFF3B38A0), 'route': '/ia/faculty'},
+      {'title': 'Reports & Alerts', 'icon': Icons.analytics_rounded, 'color': const Color(0xFF16A34A), 'route': '/faculty/reports'},
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Quick Module Access",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 16),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 2.2,
+            children: actions.map((act) {
+              final color = act['color'] as Color;
+              return InkWell(
+                onTap: () => context.go(act['route'] as String),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: color.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(act['icon'] as IconData, color: color, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          act['title'] as String,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementsCard(BuildContext context, List announcements, bool isDark) {
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B38A0).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.campaign_rounded, color: Color(0xFF3B38A0), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Notices & Upcoming Exams",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.go('/notifications'),
+                child: const Text("View All", style: TextStyle(color: Color(0xFF13246E))),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          if (announcements.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: Text(
+                  "No announcements posted yet.",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: announcements.length,
+              separatorBuilder: (_, index) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final ann = announcements[index];
+                final title = ann['title'] ?? 'Notice';
+                final content = ann['content'] ?? '';
+                final priority = (ann['priority'] ?? 'NORMAL').toString().toUpperCase();
+                final category = (ann['category'] ?? 'GENERAL').toString().toUpperCase();
+                final date = ann['created_at'] ?? '';
+
+                Color priorityColor = Colors.grey;
+                if (priority == 'URGENT') priorityColor = Colors.red;
+                if (priority == 'IMPORTANT') priorityColor = Colors.orange;
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (priority != 'NORMAL')
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: BoxDecoration(
+                                color: priorityColor.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                priority,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: priorityColor,
+                                ),
+                              ),
+                            ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF13246E).withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              category,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF13246E),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            date,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      if (content.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          content,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white70 : Colors.black54,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
   }
 }
 

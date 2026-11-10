@@ -175,14 +175,18 @@ class _DepartmentAttendanceDashboardState
       appBar: AppBar(
         title: const Text(
           "Department Attendance",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(color: Color(0xFF13246E), fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF13246E),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF13246E),
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Color(0xFF13246E)),
             tooltip: "Refresh Schedule",
             onPressed: _loadSchedule,
           ),

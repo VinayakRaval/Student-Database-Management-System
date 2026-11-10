@@ -9,6 +9,7 @@ class SubjectState {
   final List<SubjectOption> departments;
   final List<SubjectOption> semesters;
   final List<SubjectOption> schemas;
+  final List<SubjectOption> academicYears;
   final String? errorMessage;
   final bool isSuccess;
 
@@ -17,6 +18,7 @@ class SubjectState {
     this.departments = const [],
     this.semesters = const [],
     this.schemas = const [],
+    this.academicYears = const [],
     this.errorMessage,
     this.isSuccess = false,
   });
@@ -26,6 +28,7 @@ class SubjectState {
     List<SubjectOption>? departments,
     List<SubjectOption>? semesters,
     List<SubjectOption>? schemas,
+    List<SubjectOption>? academicYears,
     String? errorMessage,
     bool? isSuccess,
   }) {
@@ -34,6 +37,7 @@ class SubjectState {
       departments: departments ?? this.departments,
       semesters: semesters ?? this.semesters,
       schemas: schemas ?? this.schemas,
+      academicYears: academicYears ?? this.academicYears,
       errorMessage: errorMessage,
       isSuccess: isSuccess ?? false,
     );
@@ -53,8 +57,9 @@ class SubjectController extends StateNotifier<SubjectState> {
       final deptFuture = _dio.get('/academics/departments/').catchError((e) => Response(requestOptions: RequestOptions(path: ''), data: []));
       final semFuture = _dio.get('/academics/semesters/').catchError((e) => Response(requestOptions: RequestOptions(path: ''), data: []));
       final schemaFuture = _dio.get('/academics/schemas/').catchError((e) => Response(requestOptions: RequestOptions(path: ''), data: []));
+      final ayFuture = _dio.get('/academics/academic-years/').catchError((e) => Response(requestOptions: RequestOptions(path: ''), data: []));
 
-      final results = await Future.wait([deptFuture, semFuture, schemaFuture]);
+      final results = await Future.wait([deptFuture, semFuture, schemaFuture, ayFuture]);
 
       List<dynamic> getList(dynamic data) {
         if (data is Map && data.containsKey('results') && data['results'] is List) return data['results'] as List;
@@ -65,6 +70,7 @@ class SubjectController extends StateNotifier<SubjectState> {
       var depts = getList(results[0].data).map((e) => SubjectOption.fromMap(e)).toList();
       var sems = getList(results[1].data).map((e) => SubjectOption.fromMap(e)).toList();
       var schemas = getList(results[2].data).map((e) => SubjectOption.fromMap(e)).toList();
+      var ays = getList(results[3].data).map((e) => SubjectOption.fromMap(e)).toList();
 
       if (depts.isEmpty) {
         depts = [
@@ -86,6 +92,7 @@ class SubjectController extends StateNotifier<SubjectState> {
         departments: depts,
         semesters: sems,
         schemas: schemas,
+        academicYears: ays,
       );
     } catch (e) {
       state = state.copyWith(
@@ -119,7 +126,13 @@ class SubjectController extends StateNotifier<SubjectState> {
           } else if (map.containsKey('detail')) {
             errorMsg = map['detail'].toString();
           } else if (map.values.isNotEmpty) {
-            errorMsg = map.values.first.toString();
+            final firstVal = map.values.first;
+            final firstKey = map.keys.first.toString().replaceAll('_', ' ').toUpperCase();
+            if (firstVal is List && firstVal.isNotEmpty) {
+              errorMsg = "$firstKey: ${firstVal.first}";
+            } else {
+              errorMsg = "$firstKey: $firstVal";
+            }
           } else {
             errorMsg = map.toString();
           }

@@ -12,6 +12,7 @@ class AssignSubjectState {
   final List<AssignOption> academicYears;
   final List<AssignOption> faculties;
   final List<AssignOption> availableSubjects; // Fetched dynamically
+  final List<ExistingAssignment> existingAssignments; // Currently assigned subjects for this cohort
   
   final String? errorMessage;
   final bool isSuccess;
@@ -23,6 +24,7 @@ class AssignSubjectState {
     this.academicYears = const [],
     this.faculties = const [],
     this.availableSubjects = const [],
+    this.existingAssignments = const [],
     this.errorMessage,
     this.isSuccess = false,
   });
@@ -34,6 +36,7 @@ class AssignSubjectState {
     List<AssignOption>? academicYears,
     List<AssignOption>? faculties,
     List<AssignOption>? availableSubjects,
+    List<ExistingAssignment>? existingAssignments,
     String? errorMessage,
     bool? isSuccess,
   }) {
@@ -44,6 +47,7 @@ class AssignSubjectState {
       academicYears: academicYears ?? this.academicYears,
       faculties: faculties ?? this.faculties,
       availableSubjects: availableSubjects ?? this.availableSubjects,
+      existingAssignments: existingAssignments ?? this.existingAssignments,
       errorMessage: errorMessage,
       isSuccess: isSuccess ?? false,
     );
@@ -84,7 +88,10 @@ class AssignSubjectController extends StateNotifier<AssignSubjectState> {
         sems = List.generate(8, (i) => AssignOption(id: i + 1, name: "Semester ${i + 1}"));
       }
       if (ays.isEmpty) {
-        ays = [AssignOption(id: 1, name: "2025-2026")];
+        ays = [
+          AssignOption(id: 1, name: "2025-2026"),
+          AssignOption(id: 2, name: "2026-2027"),
+        ];
       }
 
       state = state.copyWith(
@@ -100,39 +107,120 @@ class AssignSubjectController extends StateNotifier<AssignSubjectState> {
         isLoading: false,
         errorMessage: "Init Error: $e",
         semesters: List.generate(8, (i) => AssignOption(id: i + 1, name: "Semester ${i + 1}")),
-        academicYears: [AssignOption(id: 1, name: "2025-2026")],
+        academicYears: [
+          AssignOption(id: 1, name: "2025-2026"),
+          AssignOption(id: 2, name: "2026-2027"),
+        ],
       );
     }
   }
 
-  // 2. Fetch Subjects based on Department & Semester (supports cross-department)
-  Future<void> fetchSubjects(dynamic deptId, int semId) async {
+  // 2. Fetch Subjects based on Department & Semester and Existing Assignments
+    Future<AssignOption?> addAcademicYear(String yearName) async {
+    final cleanName = yearName.trim();
+    try {
+      final res = await _dio.post('/academics/academic-years/', data: {'year_name': cleanName});
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final newOption = AssignOption.fromMap(res.data);
+        final currentAys = List<AssignOption>.from(state.academicYears);
+        if (!currentAys.any((e) => e.id == newOption.id || e.name == newOption.name)) {
+          currentAys.add(newOption);
+        }
+        state = state.copyWith(academicYears: currentAys);
+        return newOption;
+      }
+    } catch (e) {
+      // If error or already exists, try fetching academic years list
+      try {
+        final res = await _dio.get('/academics/academic-years/');
+        List<dynamic> list = [];
+        if (res.data is Map && res.data.containsKey('results')) {
+          list = res.data['results'] as List;
+        } else if (res.data is List) {
+          list = res.data;
+        }
+        if (list.isNotEmpty) {
+          final fetched = list.map((e) => AssignOption.fromMap(e)).toList();
+          state = state.copyWith(academicYears: fetched);
+          final match = fetched.firstWhere(
+            (e) => e.name.toLowerCase() == cleanName.toLowerCase(),
+            orElse: () => fetched.last,
+          );
+          return match;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<void> fetchSubjects(dynamic deptId, int semId, {dynamic academicYearId}) async {
     state = state.copyWith(isLoading: true); // Show loading while fetching subjects
     try {
       final queryParams = <String, dynamic>{'semester': semId};
       if (deptId != null && deptId.toString().isNotEmpty) {
         queryParams['department_id'] = deptId;
       }
-      // Endpoint from views.py: GetSubjectsView with filtering
-      final response = await _dio.get(
+      final subFuture = _dio.get(
         '/subjects/getSubjects/', 
         queryParameters: queryParams,
       );
-      
-      List<dynamic> data;
-      if (response.data is List) {
-        data = response.data;
-      } else {
-        // Handle "No subjects found" 404 or empty object
-        data = [];
-      }
 
-      final subjects = data.map((e) => AssignOption.fromMap(e)).toList();
-      
-      state = state.copyWith(isLoading: false, availableSubjects: subjects);
+      final assignParams = <String, dynamic>{'semester': semId};
+      if (deptId != null && deptId.toString().isNotEmpty) {
+        assignParams['department_id'] = deptId;
+      }
+      if (academicYearId != null) {
+        assignParams['academic_year'] = academicYearId;
+      }
+      final assignFuture = _dio.get(
+        '/subjects/getAssignedProfessors/',
+        queryParameters: assignParams,
+      );
+
+      final results = await Future.wait([
+        subFuture.catchError((e) => Response(requestOptions: RequestOptions(path: ''), data: [])),
+        assignFuture.catchError((e) => Response(requestOptions: RequestOptions(path: ''), data: [])),
+      ]);
+
+      List<dynamic> subData = results[0].data is List ? (results[0].data as List) : [];
+      List<dynamic> assignData = results[1].data is List ? (results[1].data as List) : [];
+
+      final subjects = subData.map((e) => AssignOption.fromMap(e)).toList();
+      final existing = assignData.map((e) => ExistingAssignment.fromMap(e)).toList();
+
+      state = state.copyWith(
+        isLoading: false,
+        availableSubjects: subjects,
+        existingAssignments: existing,
+      );
     } catch (e) {
-      // If 404 (No subjects), just clear the list
-      state = state.copyWith(isLoading: false, availableSubjects: []); 
+      state = state.copyWith(
+        isLoading: false,
+        availableSubjects: [],
+        existingAssignments: [],
+      ); 
+    }
+  }
+
+  // 2b. Refresh existing assignments when academic year changes
+  Future<void> fetchExistingAssignments(dynamic deptId, int semId, dynamic academicYearId) async {
+    try {
+      final assignParams = <String, dynamic>{'semester': semId};
+      if (deptId != null && deptId.toString().isNotEmpty) {
+        assignParams['department_id'] = deptId;
+      }
+      if (academicYearId != null) {
+        assignParams['academic_year'] = academicYearId;
+      }
+      final response = await _dio.get(
+        '/subjects/getAssignedProfessors/',
+        queryParameters: assignParams,
+      );
+      List<dynamic> assignData = response.data is List ? (response.data as List) : [];
+      final existing = assignData.map((e) => ExistingAssignment.fromMap(e)).toList();
+      state = state.copyWith(existingAssignments: existing);
+    } catch (e) {
+      // keep existing
     }
   }
 

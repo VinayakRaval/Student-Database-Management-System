@@ -12,7 +12,10 @@ class IsHOD(permissions.BasePermission):
         if hasattr(request.user, "faculty_profile") and getattr(request.user.faculty_profile, "role", "").upper() in ["HOD", "HEAD OF DEPARTMENT"]:
             return True
         from hod_assignment.models import HODAssignment
-        return HODAssignment.objects.filter(faculty__user=request.user, end_date__isnull=True).exists()
+        return (
+            HODAssignment.objects.filter(faculty__user=request.user, end_date__isnull=True).exists() or
+            (bool(request.user.email) and HODAssignment.objects.filter(faculty__email=request.user.email, end_date__isnull=True).exists())
+        )
 
 class IsPrincipal(permissions.BasePermission):
     def has_permission(self, request, view):

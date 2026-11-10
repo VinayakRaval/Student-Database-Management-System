@@ -47,14 +47,44 @@ class ExternalResult(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Permanent Marks Lock
+    is_locked = models.BooleanField(default=False)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='locked_results'
+    )
+
     class Meta:
         unique_together = ('student', 'semester', 'exam_type')
         ordering = ['-uploaded_at']
         verbose_name = "External Result"
         verbose_name_plural = "External Results"
 
+    def save(self, *args, **kwargs):
+        from django.core.exceptions import PermissionDenied
+        if self.pk and not getattr(self, '_authorized_correction', False):
+            orig = ExternalResult.objects.filter(pk=self.pk).first()
+            if orig and orig.is_locked:
+                update_fields = kwargs.get('update_fields')
+                allowed = {'is_locked', 'locked_at', 'locked_by'}
+                if not (update_fields and set(update_fields).issubset(allowed)):
+                    raise PermissionDenied("Semester Completed – Examination results are permanently locked against modifications.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import PermissionDenied
+        if self.is_locked and not getattr(self, '_authorized_correction', False):
+            raise PermissionDenied("Semester Completed – Examination results are permanently locked against deletion.")
+        super().delete(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.student} — Sem {self.semester.sem_number} ({self.exam_type})"
+        lock_str = " [LOCKED]" if self.is_locked else ""
+        return f"{self.student} — Sem {self.semester.sem_number} ({self.exam_type}){lock_str}"
+
 
 
 class ChangeLog(models.Model):

@@ -1,5 +1,8 @@
 import re
-import fitz  # PyMuPDF
+try:
+    import pymupdf as fitz  # PyMuPDF
+except ImportError:
+    import fitz
 from rest_framework import serializers
 from .models import ExternalResult, ChangeLog
 from rest_framework.response import Response
@@ -99,7 +102,10 @@ class ExternalResultSerializer(serializers.ModelSerializer):
         # Extract PDF text
         try:
             file_bytes = value.read()
-            import fitz
+            try:
+                import pymupdf as fitz
+            except ImportError:
+                import fitz
             with fitz.open(stream=file_bytes, filetype="pdf") as pdf:
                 text = "".join(page.get_text("text") or "" for page in pdf)
         except Exception as e:

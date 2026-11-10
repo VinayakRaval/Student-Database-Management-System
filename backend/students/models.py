@@ -6,8 +6,17 @@ from encrypted_model_fields.fields import EncryptedTextField, EncryptedCharField
 CustomUser = get_user_model()
 
 GENDER_CHOICES = [('male', 'Male'), ('female', 'Female'), ('other', 'Other')]
-STATUS_CHOICES = [('active', 'Active'), ('inactive', 'Inactive')]
 SEAT_CHOICES = [('general_merit', 'General Merit (GM)'), ('snq', 'SNQ'),('lateral', 'Lateral')]
+
+STATUS_CHOICES = [
+    ('active', 'Active'),
+    ('inactive', 'Inactive'),
+    ('promoted', 'Promoted'),
+    ('graduated', 'Graduated'),
+    ('passed_out', 'Passed Out'),
+    ('alumni', 'Alumni'),
+    ('left', 'Left College'),
+]
 
 REGISTRATION_STATUS_CHOICES = [
     ('pending', 'Pending'),
@@ -46,6 +55,7 @@ class Student(models.Model):
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="students")
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True, blank=True)
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.SET_NULL, null=True, blank=True)
+    class_teacher = models.ForeignKey("faculty.Faculty", on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_students")
 
     # Admission & status
     admission_id = models.CharField(max_length=20, unique=True, blank=True)
@@ -81,6 +91,8 @@ class Student(models.Model):
     study_certificate = models.FileField(upload_to='documents/certificates/', null=True, blank=True)
     photo = models.ImageField(upload_to='photos/', null=True, blank=True)
     signature = models.ImageField(upload_to='signatures/', null=True, blank=True)
+    custom_personal_details = models.JSONField(default=dict, blank=True, null=True)
+    custom_documents = models.JSONField(default=list, blank=True, null=True)
     temporary_password = models.CharField(max_length=50, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
@@ -106,3 +118,51 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.admission_id})"
+
+
+class StudentAcademicHistory(models.Model):
+    STATUS_AT_TIME_CHOICES = [
+        ('enrolled', 'Enrolled'),
+        ('promoted', 'Promoted'),
+        ('graduated', 'Graduated'),
+        ('passed_out', 'Passed Out'),
+        ('alumni', 'Alumni'),
+        ('left', 'Left College'),
+        ('completed', 'Completed'),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='academic_histories')
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='student_histories')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.SET_NULL, null=True, blank=True, related_name='student_histories')
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
+    class_teacher = models.ForeignKey("faculty.Faculty", on_delete=models.SET_NULL, null=True, blank=True, related_name="academic_history_students")
+    status_at_time = models.CharField(max_length=20, choices=STATUS_AT_TIME_CHOICES, default='enrolled')
+
+    # Aggregated metrics snapshot
+    attendance_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    total_classes = models.IntegerField(default=0)
+    attended_classes = models.IntegerField(default=0)
+    ia_marks_obtained = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    ia_marks_total = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    sgpa = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cgpa = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    credits_earned = models.IntegerField(default=0)
+    backlogs_count = models.IntegerField(default=0)
+
+    # Promotion audit info
+    promoted_at = models.DateTimeField(null=True, blank=True)
+    promoted_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='promotions_authorized')
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'student_academic_history'
+        unique_together = ('student', 'semester', 'academic_year')
+        ordering = ['student', 'semester__sem_number']
+
+    def __str__(self):
+        sem_str = f"Sem {self.semester.sem_number}" if self.semester else "Sem ?"
+        ay_str = f" ({self.academic_year.year_name})" if self.academic_year else ""
+        return f"{self.student.usn or self.student.name} - {sem_str}{ay_str} [{self.status_at_time}]"
+
